@@ -1,11 +1,14 @@
 """REST API: search, model detail, download, download status."""
 
+import logging
 import os
+import time
 from pathlib import Path
 
 import markdown
 from fastapi import APIRouter, HTTPException, BackgroundTasks
-from fastapi.responses import JSONResponse
+
+logger = logging.getLogger(__name__)
 
 from app.main import get_config
 from app.config import get_models_ini_path
@@ -32,20 +35,28 @@ async def api_search(
     offset: int = 0,
 ):
     """Search GGUF models on Hugging Face."""
+    logger.debug("GET /api/search q=%r limit=%d offset=%d", q, limit, offset)
     items = hf_service.search_models(query=q, limit=limit, offset=offset)
+    logger.debug("GET /api/search returned %d models", len(items))
     return {"models": items}
 
 
 @router.get("/model/{repo_id:path}")
 async def api_model_detail(repo_id: str):
-    """Get model card (markdown + HTML), GGUF quantizations (grouped), and capabilities."""
+    """Get model card (markdown + HTML), GGUF quantizations (grouped with sizes), and capabilities."""
+    logger.debug("GET /api/model/%s", repo_id)
     gguf_files = hf_service.list_gguf_files(repo_id)
-    quantizations = hf_service.group_gguf_by_quantization(gguf_files)
+    file_sizes = hf_service.get_repo_file_sizes(repo_id)
+    quantizations = hf_service.group_gguf_by_quantization(gguf_files, file_sizes=file_sizes)
     model_card = hf_service.get_model_card_content(repo_id)
     capabilities = hf_service.get_model_capabilities(repo_id)
     model_card_html = ""
     if model_card:
         model_card_html = markdown.markdown(model_card, extensions=["extra", "nl2br"])
+    logger.debug(
+        "GET /api/model/%s: %d gguf files, %d quant groups, card_len=%d",
+        repo_id, len(gguf_files), len(quantizations), len(model_card),
+    )
     return {
         "repo_id": repo_id,
         "gguf_files": gguf_files,
@@ -62,7 +73,7 @@ async def api_download(
     filename: str | None = None,
     filenames: str | None = None,
     section_name: str | None = None,
-    background_tasks: BackgroundTasks = None,  # FastAPI injects when no default
+    background_tasks: BackgroundTasks = None,  # FastAPI injects BackgroundTasks automatically
 ):
     """
     Start download of one or more GGUF files (multifile model). Pass filename= or filenames= comma-separated.
@@ -81,8 +92,13 @@ async def api_download(
     config = get_config()
     models_dir = Path(config["models_dir"])
     models_dir.mkdir(parents=True, exist_ok=True)
-    job_id = f"{repo_id}:{to_download[0]}"
+    # Use a unique job_id per download attempt to avoid collision on re-download
+    job_id = f"{repo_id}:{to_download[0]}:{int(time.time() * 1000)}"
     _download_jobs[job_id] = {"status": "running", "path": None, "error": None}
+    logger.info(
+        "Download started: repo=%s files=%s job_id=%s models_dir=%s",
+        repo_id, to_download, job_id, models_dir,
+    )
 
     def run_download():
         try:
@@ -91,7 +107,9 @@ async def api_download(
             try:
                 first_path = None
                 for fn in to_download:
+                    logger.info("Downloading %s / %s …", repo_id, fn)
                     path = hf_service.download_model(repo_id, fn, models_dir)
+                    logger.info("Downloaded %s / %s → %s", repo_id, fn, path)
                     if first_path is None:
                         first_path = path
             finally:
@@ -107,9 +125,14 @@ async def api_download(
             ini_path = get_models_ini_path(models_dir)
             recommended["LLAMA_ARG_MODEL"] = str(first_path)
             ini_manager.add_or_update_section(ini_path, section, recommended, merge=True)
+            logger.info(
+                "Download completed: job_id=%s section='%s' path=%s",
+                job_id, section, first_path,
+            )
         except Exception as e:
             _download_jobs[job_id]["status"] = "failed"
             _download_jobs[job_id]["error"] = str(e)
+            logger.error("Download failed: job_id=%s error=%s", job_id, e, exc_info=True)
 
     if background_tasks is not None:
         background_tasks.add_task(run_download)

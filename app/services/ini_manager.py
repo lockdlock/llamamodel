@@ -1,9 +1,12 @@
 """Read/write models.ini compatible with llama.cpp server."""
 
 import fcntl
+import logging
 from configparser import ConfigParser
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 LLAMA_CONFIG_VERSION = "1"
 LLAMA_ARG_PREFIX = "LLAMA_ARG_"
@@ -30,6 +33,7 @@ def _unlock_file(f) -> None:
 def read_ini(ini_path: Path) -> ConfigParser:
     """Read models.ini; create minimal one if missing. Expects LLAMA_CONFIG_VERSION at top or [section] blocks."""
     parser = ConfigParser()
+    parser.optionxform = str  # preserve key case (LLAMA_ARG_* must stay uppercase for llama.cpp)
     if ini_path.exists():
         with open(ini_path) as f:
             _lock_file(f, exclusive=False)
@@ -43,25 +47,28 @@ def read_ini(ini_path: Path) -> ConfigParser:
         parser.read_string(content)
         if parser.has_section("__top__"):
             parser.remove_section("__top__")
+        logger.debug("Read models.ini from %s (%d sections)", ini_path, len(parser.sections()))
+    else:
+        logger.debug("models.ini not found at %s; returning empty parser", ini_path)
     return parser
 
 
 def write_ini(ini_path: Path, parser: ConfigParser) -> None:
     """Write models.ini with file lock. Writes LLAMA_CONFIG_VERSION at top then model sections."""
     _ensure_models_dir(ini_path)
+    sections = [s for s in parser.sections() if s != "DEFAULT"]
     with open(ini_path, "w") as f:
         _lock_file(f, exclusive=True)
         try:
             f.write(f"LLAMA_CONFIG_VERSION = {LLAMA_CONFIG_VERSION}\n\n")
-            for section in parser.sections():
-                if section == "DEFAULT":
-                    continue
+            for section in sections:
                 f.write(f"[{section}]\n")
                 for k, v in parser[section].items():
                     f.write(f"{k} = {v}\n")
                 f.write("\n")
         finally:
             _unlock_file(f)
+    logger.debug("Wrote models.ini to %s (%d sections)", ini_path, len(sections))
 
 
 def list_sections(ini_path: Path) -> list[dict[str, Any]]:
@@ -73,6 +80,7 @@ def list_sections(ini_path: Path) -> list[dict[str, Any]]:
             continue
         params = dict(parser[section])
         result.append({"name": section, "params": params})
+    logger.debug("list_sections: %d models in %s", len(result), ini_path)
     return result
 
 
@@ -80,7 +88,9 @@ def get_section(ini_path: Path, section_name: str) -> dict[str, str] | None:
     """Get one section's params or None if missing."""
     parser = read_ini(ini_path)
     if not parser.has_section(section_name):
+        logger.debug("get_section: section '%s' not found in %s", section_name, ini_path)
         return None
+    logger.debug("get_section: loaded '%s' from %s", section_name, ini_path)
     return dict(parser[section_name])
 
 
@@ -93,6 +103,7 @@ def set_section(ini_path: Path, section_name: str, params: dict[str, str]) -> No
     for k, v in params.items():
         parser.set(section_name, k, str(v))
     write_ini(ini_path, parser)
+    logger.info("set_section: wrote section '%s' (%d keys) to %s", section_name, len(params), ini_path)
 
 
 def add_or_update_section(
@@ -104,7 +115,8 @@ def add_or_update_section(
 ) -> None:
     """Add or update a section. If merge=True, existing keys are preserved if not in params."""
     parser = read_ini(ini_path)
-    if parser.has_section(section_name) and merge:
+    existed = parser.has_section(section_name)
+    if existed and merge:
         existing = dict(parser[section_name])
         for k, v in params.items():
             existing[k] = v
@@ -115,13 +127,20 @@ def add_or_update_section(
     for k, v in params.items():
         parser.set(section_name, k, str(v))
     write_ini(ini_path, parser)
+    action = "updated" if existed else "added"
+    logger.info(
+        "add_or_update_section: %s section '%s' (%d keys, merge=%s) in %s",
+        action, section_name, len(params), merge, ini_path,
+    )
 
 
 def delete_section(ini_path: Path, section_name: str) -> bool:
     """Remove a section. Returns True if it existed."""
     parser = read_ini(ini_path)
     if not parser.has_section(section_name):
+        logger.debug("delete_section: section '%s' not found in %s", section_name, ini_path)
         return False
     parser.remove_section(section_name)
     write_ini(ini_path, parser)
+    logger.info("delete_section: removed section '%s' from %s", section_name, ini_path)
     return True

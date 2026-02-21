@@ -1,10 +1,14 @@
 """Discover: search GGUF models and model detail page."""
 
+import logging
+
 from fastapi import APIRouter, Request, Query
 from fastapi.responses import HTMLResponse
 
 from app.main import templates, get_config
 from app.services import hf_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -17,9 +21,10 @@ async def discover_page(
     offset: int = Query(0, ge=0),
 ):
     """Discover page: search and list GGUF models."""
+    logger.debug("GET /discover q=%r limit=%d offset=%d", q, limit, offset)
     config = get_config()
-    models = []
     models = hf_service.search_models(query=q, limit=limit, offset=offset)
+    logger.debug("GET /discover: rendered %d models", len(models))
     return templates.TemplateResponse(
         "discover.html",
         {"request": request, "models": models, "query": q or "", "config": config},
@@ -29,9 +34,11 @@ async def discover_page(
 @router.get("/model/{repo_id:path}", response_class=HTMLResponse)
 async def model_detail_page(request: Request, repo_id: str):
     """Model detail: Hugging Face description and list of quantizations (GGUF files)."""
+    logger.debug("GET /model/%s", repo_id)
     config = get_config()
     gguf_files = hf_service.list_gguf_files(repo_id)
     model_card = hf_service.get_model_card_content(repo_id)
+    logger.debug("GET /model/%s: %d gguf files, card_len=%d", repo_id, len(gguf_files), len(model_card))
     return templates.TemplateResponse(
         "model_detail.html",
         {

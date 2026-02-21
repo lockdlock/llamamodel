@@ -1,7 +1,10 @@
 """Parse model card / README for recommended LLAMA_ARG_* parameters."""
 
+import logging
 import re
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 # Map common names in model cards to LLAMA_ARG_* keys
 PARAM_PATTERNS = [
@@ -35,6 +38,11 @@ def parse_recommended_params(model_card_content: str) -> dict[str, str]:
         m = re.search(pattern, content, re.IGNORECASE)
         if m:
             out[arg_name] = m.group(1).strip()
+            logger.debug("Parsed %s = %s from model card", arg_name, out[arg_name])
+    if out:
+        logger.debug("parse_recommended_params: found %d param(s): %s", len(out), list(out.keys()))
+    else:
+        logger.debug("parse_recommended_params: no params found in model card text")
     return out
 
 
@@ -43,4 +51,8 @@ def recommended_params_with_defaults(model_card_content: str) -> dict[str, str]:
     parsed = parse_recommended_params(model_card_content)
     result = dict(DEFAULT_PARAMS)
     result.update(parsed)
+    logger.debug(
+        "recommended_params_with_defaults: %d param(s) (parsed=%d, defaults=%d)",
+        len(result), len(parsed), len(DEFAULT_PARAMS),
+    )
     return result
