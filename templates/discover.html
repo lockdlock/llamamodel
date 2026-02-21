@@ -9,8 +9,8 @@
     top: 48px;
     bottom: 0;
     display: grid;
-    /* left=30%, center=60%, right=10% */
-    grid-template-columns: 30% 60% 10%;
+    /* left=30%, center=65%, right=5% */
+    grid-template-columns: 30% 65% 5%;
     grid-template-rows: 85% 15%;
     grid-template-areas:
       "pane-left pane-center pane-right"
@@ -44,20 +44,23 @@
   .search-form { padding: 0.5rem 0.75rem; flex-shrink: 0; }
   .search-form input { width: 100%; }
   .model-result {
-    padding: 0.5rem 0.75rem;
+    padding: 0.45rem 0.75rem;
     border-bottom: 1px solid var(--muted);
     cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 0.35rem;
   }
   .model-result:hover { background: var(--bg); }
   .model-result.selected { background: var(--accent); color: var(--bg); }
-  .model-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .model-size { color: var(--muted); font-size: 0.85em; margin-right: 0.25rem; }
-  .cap-icon { width: 1.1rem; height: 1.1rem; flex-shrink: 0; }
+  .model-result.selected .model-desc { color: var(--bg); opacity: 0.8; }
+  .model-result.selected .model-size { color: var(--bg); opacity: 0.75; }
+  .model-result.selected .cap-icon.muted { color: var(--bg); opacity: 0.3; }
+  .model-result.selected .cap-icon.lit { color: var(--bg); opacity: 1; }
+  .model-row { display: flex; align-items: center; gap: 0.35rem; }
+  .model-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.9rem; }
+  .model-size { color: var(--muted); font-size: 0.8em; margin-right: 0.2rem; flex-shrink: 0; }
+  .model-desc { font-size: 0.75rem; color: var(--muted); margin-top: 0.15rem; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.3; }
+  .cap-icon { width: 1rem; height: 1rem; flex-shrink: 0; }
   .cap-icon.lit { color: var(--accent); opacity: 1; }
-  .cap-icon.muted { color: var(--muted); opacity: 0.35; }
+  .cap-icon.muted { color: var(--muted); opacity: 0.3; }
   /* Quantization buttons: compact, full-width, show size below label */
   .quant-btn {
     display: block;
@@ -222,14 +225,21 @@
         var html = '';
         data.models.forEach(function(m) {
           var size = (m.size_display || '').trim();
-          var sizePrefix = size ? '<span class="model-size">' + escapeHtml(size) + '</span> ' : '';
-          var name = displayName(m);
+          var sizeHtml = size ? '<span class="model-size">' + escapeHtml(size) + '</span>' : '';
+          var name = beautifyModelName(m.id, '');
           var owner = m.author || (m.id.indexOf('/') >= 0 ? m.id.split('/')[0] : '');
-          var ownerSuffix = owner ? ' <span class="muted">(' + escapeHtml(owner) + ')</span>' : '';
-          var caps = (m.vision ? capIcon('vision', true) : capIcon('vision', false)) +
-            (m.tools ? capIcon('tools', true) : capIcon('tools', false)) +
-            (m.thinking ? capIcon('thinking', true) : capIcon('thinking', false));
-          html += '<div class="model-result" data-repo="' + (m.id).replace(/"/g, '&quot;') + '" title="' + (m.id).replace(/"/g, '&quot;') + '"><span class="model-name">' + sizePrefix + escapeHtml(name) + ownerSuffix + '</span>' + caps + '</div>';
+          var ownerHtml = owner ? ' <span class="muted" style="font-size:0.8em;">(' + escapeHtml(owner) + ')</span>' : '';
+          var caps = capIcon('vision', !!m.vision) + capIcon('tools', !!m.tools) + capIcon('thinking', !!m.thinking);
+          var descHtml = m.short_desc
+            ? '<div class="model-desc">' + escapeHtml(m.short_desc) + '</div>'
+            : '';
+          html += '<div class="model-result" data-repo="' + (m.id).replace(/"/g, '&quot;') + '" title="' + (m.id).replace(/"/g, '&quot;') + '">'
+            + '<div class="model-row">'
+            + '<span class="model-name">' + sizeHtml + (sizeHtml ? ' ' : '') + escapeHtml(name) + ownerHtml + '</span>'
+            + caps
+            + '</div>'
+            + descHtml
+            + '</div>';
         });
         searchResults.innerHTML = html;
         searchResults.querySelectorAll('.model-result').forEach(function(el) {

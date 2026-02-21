@@ -423,6 +423,24 @@ def search_models(
         if not size_display:
             size_display = _parse_size_from_text(m.id)
 
+        # Short description from card metadata (available without extra API call)
+        short_desc = ""
+        try:
+            card_data = getattr(m, "cardData", None)
+            if card_data:
+                short_desc = (
+                    getattr(card_data, "description", None)
+                    or getattr(card_data, "summary", None)
+                    or ""
+                )
+                if short_desc:
+                    short_desc = str(short_desc).strip()
+                    # Truncate to 200 chars for the list
+                    if len(short_desc) > 200:
+                        short_desc = short_desc[:197] + "…"
+        except Exception:
+            pass
+
         items.append({
             "id": m.id,
             "repo_name": repo_name,
@@ -433,6 +451,7 @@ def search_models(
             "vision": caps["vision"],
             "tools": caps["tools"],
             "thinking": caps["thinking"],
+            "short_desc": short_desc,
         })
 
     logger.debug(
