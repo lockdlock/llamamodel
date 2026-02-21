@@ -60,15 +60,18 @@ async def api_search(
             tag_filter = m.group(1).strip()
             text_query = None
 
+    # capabilities sort is client-side; use downloads for HF API
+    api_sort = sort if sort not in ("capabilities",) else "downloads"
+
     items = hf_service.search_models(
         query=text_query,
         limit=limit * 3,  # fetch extra to allow client-side filtering
         offset=offset,
-        sort=sort,
+        sort=api_sort,
         tag_filter=tag_filter,
     )
 
-    # Apply capability filters (client-side after fetch)
+    # Apply capability filters (server-side after fetch)
     if vision is not None:
         items = [m for m in items if bool(m.get("vision")) == vision]
     if tools is not None:
@@ -76,7 +79,7 @@ async def api_search(
     if thinking is not None:
         items = [m for m in items if bool(m.get("thinking")) == thinking]
 
-    # Apply client-side sort for non-HF-native sorts
+    # Apply server-side sort for non-HF-native sorts (direction handled client-side)
     if sort == "likes":
         items.sort(key=lambda m: m.get("likes", 0), reverse=True)
     elif sort == "name":
@@ -84,16 +87,17 @@ async def api_search(
     elif sort == "author":
         items.sort(key=lambda m: m.get("author", "").lower())
     elif sort == "size":
-        # Sort by size_display numerically (parse B/M suffix)
+        import re as _re2
         def _size_key(m):
             s = m.get("size_display", "") or ""
-            import re as _re2
             mm = _re2.match(r"(\d+\.?\d*)\s*([BbMm])", s)
             if mm:
                 v = float(mm.group(1))
                 return v * 1e9 if mm.group(2).upper() == "B" else v * 1e6
             return 0
         items.sort(key=_size_key, reverse=True)
+    elif sort == "capabilities":
+        items.sort(key=lambda m: sum([bool(m.get("vision")), bool(m.get("tools")), bool(m.get("thinking"))]), reverse=True)
 
     items = items[:limit]
     logger.debug("GET /api/search returned %d models", len(items))
