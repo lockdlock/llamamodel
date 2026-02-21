@@ -125,9 +125,10 @@
     padding-bottom: 0.75rem;
     border-bottom: 1px solid var(--muted);
   }
-  .model-header h2 { margin: 0 0 0.25rem; font-size: 1.15rem; }
-  .model-header .model-meta { font-size: 0.85rem; color: var(--muted); display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; }
-  .model-header .param-badge {
+  .model-header-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.5rem; flex-wrap: wrap; }
+  .model-header h2 { margin: 0; font-size: 1.1rem; flex: 1; }
+  .model-header-right { display: flex; align-items: center; gap: 0.4rem; flex-shrink: 0; }
+  .param-badge {
     background: var(--accent);
     color: var(--bg);
     border-radius: 999px;
@@ -135,6 +136,13 @@
     font-size: 0.8rem;
     font-weight: 600;
   }
+  .model-meta-line { font-size: 0.82rem; color: var(--muted); margin-top: 0.3rem; }
+  .model-short-desc { font-size: 0.85rem; color: var(--fg); margin-top: 0.35rem; line-height: 1.4; }
+  .model-tags-header { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 0.4rem; }
+  /* Tag classification styles */
+  .tag-mandatory { font-weight: 700; }
+  .tag-core { font-style: italic; }
+  .tag-optional { font-weight: 400; font-style: normal; }
   /* Tables in model cards */
   .model-card-html table { border-collapse: collapse; width: 100%; margin: 0.5rem 0; font-size: 0.9rem; }
   .model-card-html th, .model-card-html td { border: 1px solid var(--muted); padding: 0.3rem 0.5rem; text-align: left; }
@@ -303,25 +311,61 @@
     fetch('/api/model/' + encodeURIComponent(repoId))
       .then(function(r) { return r.json(); })
       .then(function(data) {
-        // Build model header: beautified name, param count badge, HF link, capability icons
+        // Build model header
         var displayTitle = beautifyModelName(repoId, data.model_title || '');
-        var paramBadge = (data.param_count || data.size_display || '')
-          ? '<span class="param-badge">' + escapeHtml(data.param_count || data.size_display || '') + '</span>'
+        var paramBadge = (data.param_count || '')
+          ? '<span class="param-badge">' + escapeHtml(data.param_count) + '</span>'
           : '';
-        var caps = data.capabilities || {};
-        var capIcons = capIcon('vision', !!caps.vision) + capIcon('tools', !!caps.tools) + capIcon('thinking', !!caps.thinking);
-        var hfLink = '<a href="https://huggingface.co/' + escapeHtml(repoId) + '" target="_blank" rel="noopener" style="font-size:0.85rem;">View on Hugging Face ↗</a>';
+        // Capabilities from card info (vision/tools/thinking at top level)
+        var capIcons = capIcon('vision', !!data.vision) + capIcon('tools', !!data.tools) + capIcon('thinking', !!data.thinking);
+        var hfLink = '<a href="https://huggingface.co/' + escapeHtml(repoId) + '" target="_blank" rel="noopener" style="font-size:0.82rem;">View on Hugging Face ↗</a>';
+        // Meta line: author, license
+        var metaParts = [];
+        if (data.author) metaParts.push('<span>by <strong>' + escapeHtml(data.author) + '</strong></span>');
+        if (data.license) metaParts.push('<span>License: <em>' + escapeHtml(data.license) + '</em></span>');
+        var metaLine = metaParts.length ? '<div class="model-meta-line">' + metaParts.join(' · ') + '</div>' : '';
+        // Short description
+        var descLine = data.short_desc
+          ? '<div class="model-short-desc">' + escapeHtml(data.short_desc) + '</div>'
+          : '';
+        // Classified tags: mandatory=bold, core=italic, optional=normal
+        var tagsHtml = '';
+        var allTagGroups = [
+          { tags: data.tags_mandatory || [], cls: 'tag-mandatory' },
+          { tags: data.tags_core || [], cls: 'tag-core' },
+          { tags: data.tags_optional || [], cls: 'tag-optional' },
+        ];
+        var hasAnyTag = allTagGroups.some(function(g) { return g.tags.length > 0; });
+        if (hasAnyTag) {
+          tagsHtml = '<div class="model-tags-header">';
+          allTagGroups.forEach(function(g) {
+            g.tags.forEach(function(tag) {
+              tagsHtml += '<span class="model-tag ' + g.cls + '" data-tag="' + escapeHtml(tag) + '">' + escapeHtml(tag) + '</span>';
+            });
+          });
+          tagsHtml += '</div>';
+        }
         var header = '<div class="model-header">'
+          + '<div class="model-header-row">'
           + '<h2>' + escapeHtml(displayTitle) + '</h2>'
-          + '<div class="model-meta">'
-          + (paramBadge ? paramBadge : '')
-          + capIcons
-          + hfLink
+          + '<div class="model-header-right">' + (paramBadge || '') + capIcons + hfLink + '</div>'
           + '</div>'
+          + metaLine
+          + descLine
+          + tagsHtml
           + '</div>';
-        centerContent.innerHTML = header + (data.model_card_html
+        var cardHtml = data.model_card_html
           ? '<div class="model-card-html">' + data.model_card_html + '</div>'
-          : '<p class="center-placeholder">No description available.</p>');
+          : '<p class="center-placeholder">No description available.</p>';
+        centerContent.innerHTML = header + cardHtml;
+        // Make header tags clickable (filter search)
+        centerContent.querySelectorAll('.model-tag').forEach(function(badge) {
+          badge.addEventListener('click', function(e) {
+            e.stopPropagation();
+            var tag = badge.dataset.tag;
+            if (tag) { searchInput.value = tag; runSearch(); }
+          });
+        });
         if (data.quantizations && data.quantizations.length) {
           var html = '';
           data.quantizations.forEach(function(entry) {

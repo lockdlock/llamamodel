@@ -338,31 +338,51 @@ def group_gguf_by_quantization(
     return result
 
 
-# Tags to exclude from display (internal HF tags, noise, already shown via capability icons)
-_HIDDEN_TAGS = {
-    "gguf", "transformers", "pytorch", "safetensors", "license:other",
-    "license:apache-2.0", "license:mit", "license:llama3", "license:llama2",
-    "license:gemma", "license:cc-by-4.0", "license:cc-by-nc-4.0",
-    "license:cc-by-sa-4.0", "license:cc-by-nc-sa-4.0", "license:gpl-3.0",
-    "license:agpl-3.0", "license:openrail", "license:openrail++",
+import re as _re
+
+# Tags that are always hidden (internal HF infrastructure tags)
+_ALWAYS_HIDDEN_TAGS = {
+    "gguf", "transformers", "pytorch", "safetensors",
     "autotrain_compatible", "endpoints_compatible", "has_space",
+    "text-generation-inference",
     "region:us", "region:eu", "region:ap",
-    "text-generation-inference", "text-generation",
-    "conversational", "text2text-generation",
+}
+
+# Mandatory tags: define the primary task/capability of the model
+_MANDATORY_TAG_PATTERNS = {
+    "text-generation", "text2text-generation", "conversational",
+    "question-answering", "summarization", "translation", "fill-mask",
+    "image-text-to-text", "visual-question-answering",
+    "function-calling", "tool-calling", "tool-use",
+    "function_calling", "tool_calling", "tool_use",
+    "thinking", "reasoning", "chain-of-thought",
+    "vision", "multimodal", "vlm",
+}
+
+# Core tags: important model characteristics
+_CORE_TAG_PATTERNS = {
+    "chat", "instruct", "instruction-tuned", "instruction-following",
+    "code", "coding", "math", "science", "medical", "legal",
+    "multilingual", "english", "chinese", "japanese", "german", "french",
+    "spanish", "arabic", "korean", "russian",
+    "base", "pretrained", "finetuned", "fine-tuned",
+    "rlhf", "dpo", "sft", "ppo",
+    "long-context", "long context", "extended-context",
+    "quantized", "4bit", "8bit", "awq", "gptq",
 }
 
 
-def _curate_display_tags(tags: list[str]) -> list[str]:
+def _classify_tags(tags: list[str]) -> dict[str, list[str]]:
     """
-    Return a curated list of tags suitable for display as badges.
-    Filters out internal/noisy HF tags and limits to 8 tags.
+    Classify tags into mandatory, core, and optional categories.
+    Returns dict with keys: mandatory, core, optional.
+    Filters out internal/noisy HF tags.
     """
-    result = []
+    mandatory, core, optional = [], [], []
     for t in tags:
         tl = t.lower()
-        if tl in _HIDDEN_TAGS:
-            continue
-        if tl.startswith("license:"):
+        # Always skip internal tags
+        if tl in _ALWAYS_HIDDEN_TAGS:
             continue
         if tl.startswith("arxiv:"):
             continue
@@ -370,14 +390,25 @@ def _curate_display_tags(tags: list[str]) -> list[str]:
             continue
         if tl.startswith("model-index"):
             continue
-        # Skip pure size tags (already shown as param count badge)
-        import re as _re
+        # Skip pure size tags (shown as param count badge)
         if _re.match(r"^\d+\.?\d*[bBmMkK]$", tl):
             continue
-        result.append(t)
-        if len(result) >= 8:
-            break
-    return result
+        # Classify
+        if tl in _MANDATORY_TAG_PATTERNS:
+            mandatory.append(t)
+        elif tl in _CORE_TAG_PATTERNS or any(c in tl for c in _CORE_TAG_PATTERNS):
+            core.append(t)
+        else:
+            optional.append(t)
+    return {"mandatory": mandatory[:6], "core": core[:6], "optional": optional[:6]}
+
+
+def _extract_license(tags: list[str]) -> str:
+    """Extract license string from tags (e.g. 'license:apache-2.0' -> 'apache-2.0')."""
+    for t in tags:
+        if t.lower().startswith("license:"):
+            return t[8:]
+    return ""
 
 
 def search_models(
@@ -428,18 +459,33 @@ def search_models(
 
         tags_raw = getattr(m, "tags", None) or []
         tags_list = list(tags_raw) if isinstance(tags_raw, (list, tuple)) else []
-
-        # Capabilities: tags are most reliable; fall back to model id text
-        caps_from_tags = _infer_capabilities_from_tags(tags_list)
-        # Also check pipeline_tag for vision
         pipeline_tag = (getattr(m, "pipeline_tag", None) or "").lower()
+
+        # Capabilities: use tags (exact matching) + pipeline_tag + model id text
+        caps_from_tags = _infer_capabilities_from_tags(tags_list)
         vision_from_pipeline = pipeline_tag in {
             "image-text-to-text", "visual-question-answering", "image-to-text",
         }
+        # Also check model id for well-known vision model name patterns
+        id_lower = m.id.lower()
+        vision_from_id = (
+            "vision" in id_lower or "vlm" in id_lower or "visual" in id_lower
+            or "llava" in id_lower or "qwen-vl" in id_lower or "internvl" in id_lower
+            or "minicpm-v" in id_lower or "phi-3-vision" in id_lower
+            or "cogvlm" in id_lower or "moondream" in id_lower
+        )
+        tools_from_id = (
+            "tool" in id_lower or "function" in id_lower
+            or "hermes" in id_lower  # Hermes models are known for tool use
+        )
+        thinking_from_id = (
+            "thinking" in id_lower or "qwq" in id_lower or "deepseek-r1" in id_lower
+            or "o1" in id_lower or "skywork-o1" in id_lower
+        )
         caps = {
-            "vision": caps_from_tags["vision"] or vision_from_pipeline or _infer_capabilities_from_text("", m.id)["vision"],
-            "tools": caps_from_tags["tools"] or _infer_capabilities_from_text("", m.id)["tools"],
-            "thinking": caps_from_tags["thinking"] or _infer_capabilities_from_text("", m.id)["thinking"],
+            "vision": caps_from_tags["vision"] or vision_from_pipeline or vision_from_id,
+            "tools": caps_from_tags["tools"] or tools_from_id,
+            "thinking": caps_from_tags["thinking"] or thinking_from_id,
         }
 
         repo_name = _repo_name(m.id)
@@ -477,27 +523,35 @@ def search_models(
                 )
                 if short_desc:
                     short_desc = str(short_desc).strip()
-                    # Truncate to 200 chars for the list
                     if len(short_desc) > 200:
                         short_desc = short_desc[:197] + "…"
         except Exception:
             pass
 
-        # Curated display tags: exclude internal/noisy HF tags, keep meaningful ones
-        display_tags = _curate_display_tags(tags_list)
+        # Classify tags into mandatory/core/optional
+        classified_tags = _classify_tags(tags_list)
+        # License from tags
+        license_str = _extract_license(tags_list)
+        author = getattr(m, "author", "") or (m.id.split("/")[0] if "/" in m.id else "")
 
         items.append({
             "id": m.id,
             "repo_name": repo_name,
             "size_display": size_display,
-            "author": getattr(m, "author", "") or (m.id.split("/")[0] if "/" in m.id else ""),
+            "author": author,
             "downloads": getattr(m, "downloads", None) or 0,
             "likes": getattr(m, "likes", None) or 0,
             "vision": caps["vision"],
             "tools": caps["tools"],
             "thinking": caps["thinking"],
             "short_desc": short_desc,
-            "tags": display_tags,
+            # Classified tags for display
+            "tags_mandatory": classified_tags["mandatory"],
+            "tags_core": classified_tags["core"],
+            "tags_optional": classified_tags["optional"],
+            # Convenience flat list for search pane (mandatory + core only)
+            "tags": classified_tags["mandatory"] + classified_tags["core"],
+            "license": license_str,
         })
 
     logger.debug(
@@ -532,23 +586,27 @@ def get_model_card_content(repo_id: str) -> str:
 
 def get_model_card_info(repo_id: str) -> dict[str, Any]:
     """
-    Fetch model card and extract structured info:
-    - content: raw markdown
-    - title: model name from card metadata or first H1 heading
-    - param_count: parameter count string if found in card text
-    Returns dict with keys: content, title, param_count.
+    Fetch model card and extract structured info.
+    Returns dict with keys:
+      content, title, param_count, license, author,
+      tags_mandatory, tags_core, tags_optional, short_desc,
+      vision, tools, thinking.
     """
     import re
     content = ""
     title = ""
     param_count = ""
+    license_str = ""
+    author = repo_id.split("/")[0] if "/" in repo_id else ""
+    card_tags: list[str] = []
+    short_desc = ""
     try:
         card = _with_retry(ModelCard.load, repo_id)
         content = card.content or ""
-        # Try card metadata (YAML front matter) for model_name or model-name
         try:
             data = card.data
             if data:
+                # Title
                 title = (
                     getattr(data, "model_name", None)
                     or getattr(data, "model-name", None)
@@ -557,19 +615,27 @@ def get_model_card_info(repo_id: str) -> dict[str, Any]:
                 )
                 if title:
                     title = str(title).strip()
+                # License
+                lic = getattr(data, "license", None)
+                if lic:
+                    license_str = str(lic).strip()
+                # Tags from card metadata
+                raw_tags = getattr(data, "tags", None) or []
+                if isinstance(raw_tags, (list, tuple)):
+                    card_tags = [str(t) for t in raw_tags]
+                # Short description from card metadata
+                desc = getattr(data, "description", None) or getattr(data, "summary", None) or ""
+                if desc:
+                    short_desc = str(desc).strip()[:200]
         except Exception:
             pass
-        # Fall back to first H1 heading in the markdown
+        # Fall back to first H1 heading
         if not title and content:
             m = re.search(r"^#\s+(.+)$", content, re.MULTILINE)
             if m:
                 title = m.group(1).strip()
-                # Remove GGUF/gguf from title
                 title = re.sub(r"\s*[-–]?\s*GGUF\b", "", title, flags=re.IGNORECASE).strip()
         # Extract parameter count from card text
-        from app.services.params_parser import parse_recommended_params
-        parsed = parse_recommended_params(content)
-        # Also try to find explicit param count patterns in card text
         m2 = re.search(
             r"(?:parameters?|params?|#\s*params?)\s*[:\-]?\s*(\d+\.?\d*)\s*([BbMmKk])",
             content,
@@ -577,23 +643,56 @@ def get_model_card_info(repo_id: str) -> dict[str, Any]:
         if m2:
             val = m2.group(1)
             unit = m2.group(2).upper()
-            if unit == "K":
-                unit = "K"
             param_count = val + unit
         if not param_count:
-            # Try safetensors-style count in card text
             m3 = re.search(r"(\d+\.?\d*)\s*[Bb]\s+(?:parameter|param)", content)
             if m3:
                 param_count = m3.group(1) + "B"
     except Exception:
         pass
-    return {"content": content, "title": title, "param_count": param_count}
+
+    # Classify tags
+    classified = _classify_tags(card_tags)
+    # If no license from card metadata, try tags
+    if not license_str:
+        license_str = _extract_license(card_tags)
+
+    # Capabilities from card content + repo id
+    caps_text = _infer_capabilities_from_text(content, repo_id)
+    caps_tags = _infer_capabilities_from_tags(card_tags)
+    id_lower = repo_id.lower()
+    vision_from_id = (
+        "vision" in id_lower or "vlm" in id_lower or "visual" in id_lower
+        or "llava" in id_lower or "qwen-vl" in id_lower or "internvl" in id_lower
+        or "minicpm-v" in id_lower or "phi-3-vision" in id_lower
+        or "cogvlm" in id_lower or "moondream" in id_lower
+    )
+    tools_from_id = "tool" in id_lower or "function" in id_lower or "hermes" in id_lower
+    thinking_from_id = (
+        "thinking" in id_lower or "qwq" in id_lower or "deepseek-r1" in id_lower
+        or "o1" in id_lower or "skywork-o1" in id_lower
+    )
+
+    return {
+        "content": content,
+        "title": title,
+        "param_count": param_count,
+        "license": license_str,
+        "author": author,
+        "short_desc": short_desc,
+        "tags_mandatory": classified["mandatory"],
+        "tags_core": classified["core"],
+        "tags_optional": classified["optional"],
+        "vision": caps_tags["vision"] or caps_text["vision"] or vision_from_id,
+        "tools": caps_tags["tools"] or caps_text["tools"] or tools_from_id,
+        "thinking": caps_tags["thinking"] or caps_text["thinking"] or thinking_from_id,
+    }
 
 
 def get_model_capabilities(repo_id: str) -> dict[str, bool]:
     """Infer vision, tools, thinking from model card content and repo id."""
-    content = get_model_card_content(repo_id)
-    return _infer_capabilities_from_text(content, repo_id)
+    info = get_model_card_info(repo_id)
+    return {"vision": info["vision"], "tools": info["tools"], "thinking": info["thinking"]}
 
 
 def download_model(

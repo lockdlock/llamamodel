@@ -43,32 +43,43 @@ async def api_search(
 
 @router.get("/model/{repo_id:path}")
 async def api_model_detail(repo_id: str):
-    """Get model card (markdown + HTML), GGUF quantizations (grouped with sizes), capabilities, title, param_count."""
+    """Get model card, quantizations, capabilities, title, param_count, tags, license, author."""
     logger.debug("GET /api/model/%s", repo_id)
     gguf_files = hf_service.list_gguf_files(repo_id)
     file_sizes = hf_service.get_repo_file_sizes(repo_id)
     quantizations = hf_service.group_gguf_by_quantization(gguf_files, file_sizes=file_sizes)
     card_info = hf_service.get_model_card_info(repo_id)
     model_card = card_info["content"]
-    model_title = card_info["title"]
-    param_count = card_info["param_count"]
-    capabilities = hf_service.get_model_capabilities(repo_id)
     model_card_html = ""
     if model_card:
         model_card_html = markdown.markdown(model_card, extensions=["extra", "nl2br"])
     logger.debug(
-        "GET /api/model/%s: %d gguf files, %d quant groups, card_len=%d, title=%r, params=%r",
-        repo_id, len(gguf_files), len(quantizations), len(model_card), model_title, param_count,
+        "GET /api/model/%s: %d gguf files, %d quant groups, card_len=%d, title=%r",
+        repo_id, len(gguf_files), len(quantizations), len(model_card), card_info.get("title"),
     )
     return {
         "repo_id": repo_id,
-        "model_title": model_title,
-        "param_count": param_count,
+        "model_title": card_info.get("title", ""),
+        "param_count": card_info.get("param_count", ""),
+        "license": card_info.get("license", ""),
+        "author": card_info.get("author", ""),
+        "short_desc": card_info.get("short_desc", ""),
+        "tags_mandatory": card_info.get("tags_mandatory", []),
+        "tags_core": card_info.get("tags_core", []),
+        "tags_optional": card_info.get("tags_optional", []),
+        "vision": card_info.get("vision", False),
+        "tools": card_info.get("tools", False),
+        "thinking": card_info.get("thinking", False),
         "gguf_files": gguf_files,
         "quantizations": quantizations,
         "model_card": model_card,
         "model_card_html": model_card_html,
-        "capabilities": capabilities,
+        # Keep capabilities dict for backward compat
+        "capabilities": {
+            "vision": card_info.get("vision", False),
+            "tools": card_info.get("tools", False),
+            "thinking": card_info.get("thinking", False),
+        },
     }
 
 
