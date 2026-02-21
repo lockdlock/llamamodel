@@ -178,6 +178,16 @@
     color: var(--fg);
     cursor: pointer;
   }
+  /* Sort direction button: thicker arrow */
+  #sort-dir-btn {
+    font-size: 1rem;
+    font-weight: 900;
+    padding: 1px 6px;
+    border-radius: 4px;
+    min-width: 1.6rem;
+    text-align: center;
+    line-height: 1.2;
+  }
   .clear-btn {
     font-size: 0.7rem;
     padding: 2px 6px;
@@ -246,7 +256,7 @@
   <div class="discover-pane pane-right">
     <div class="pane-title">Quants</div>
     <div class="pane-body" id="right-content">
-      <p class="right-placeholder">Select a model to see available quantizations.</p>
+      <p class="right-placeholder">Select a model to see its quants.</p>
     </div>
   </div>
   <div class="discover-pane pane-bottom">
@@ -295,8 +305,14 @@
       else { btn.style.opacity = ''; btn.style.textDecoration = ''; }
     });
     if (sortDirBtn) {
-      sortDirBtn.textContent = sortAscending ? '↑' : '↓';
-      sortDirBtn.title = 'Sort direction: ' + (sortAscending ? 'ascending (click for descending)' : 'descending (click for ascending)');
+      var sort = sortSelect ? sortSelect.value : 'downloads';
+      if (sort === 'name' || sort === 'author') {
+        sortDirBtn.textContent = sortAscending ? '↑' : '↓';
+        sortDirBtn.title = sortAscending ? 'Z→A (click for A→Z)' : 'A→Z (click for Z→A)';
+      } else {
+        sortDirBtn.textContent = sortAscending ? '↑' : '↓';
+        sortDirBtn.title = 'Sort direction: ' + (sortAscending ? 'ascending (click for descending)' : 'descending (click for ascending)');
+      }
     }
   }
 

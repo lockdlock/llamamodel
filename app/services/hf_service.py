@@ -488,6 +488,8 @@ def search_models(
         tools_from_id = (
             "tool" in id_lower or "function" in id_lower
             or "hermes" in id_lower  # Hermes models are known for tool use
+            or "functionary" in id_lower  # Functionary models
+            or "gorilla" in id_lower  # Gorilla models for function calling
         )
         thinking_from_id = (
             "thinking" in id_lower or "qwq" in id_lower or "deepseek-r1" in id_lower
@@ -678,7 +680,10 @@ def get_model_card_info(repo_id: str) -> dict[str, Any]:
         or "minicpm-v" in id_lower or "phi-3-vision" in id_lower
         or "cogvlm" in id_lower or "moondream" in id_lower
     )
-    tools_from_id = "tool" in id_lower or "function" in id_lower or "hermes" in id_lower
+    tools_from_id = (
+        "tool" in id_lower or "function" in id_lower
+        or "hermes" in id_lower or "functionary" in id_lower or "gorilla" in id_lower
+    )
     thinking_from_id = (
         "thinking" in id_lower or "qwq" in id_lower or "deepseek-r1" in id_lower
         or "o1" in id_lower or "skywork-o1" in id_lower
