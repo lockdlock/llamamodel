@@ -680,7 +680,9 @@
     }
     
     var html = '';
-    downloadEntries.forEach(function(e) {
+    // Reverse downloadEntries so the newest is at the top
+    var reversedEntries = downloadEntries.slice().reverse();
+    reversedEntries.forEach(function(e) {
       var cls = 'download-job';
       var info = e.label + ': ';
       var controls = '';
@@ -688,13 +690,13 @@
       
       if (e.status === 'completed') {
         cls += ' done';
-        info += (e.path || 'Done.');
+        info += (e.path || 'Done.') + ' <span style="color: #22c55e; float: right; font-weight: bold;">[SUCCESS]</span>';
       } else if (e.status === 'failed') {
         cls += ' error';
-        info += (e.error || 'Failed.');
+        info += (e.error || 'Failed.') + ' <span style="color: #ef4444; float: right; font-weight: bold;">[ERROR]</span>';
       } else if (e.status === 'cancelled') {
         cls += ' error';
-        info += 'Cancelled.';
+        info += 'Cancelled.' + ' <span style="color: #ef4444; float: right; font-weight: bold;">[CANCELLED]</span>';
       } else {
         info += 'Downloading ' + formatBytes(e.downloadedBytes) + " / " + formatBytes(e.totalBytes) + 
                 " (" + formatBytes(e.speed) + "/s) ETA: " + formatTime(e.eta);
