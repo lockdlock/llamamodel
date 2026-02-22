@@ -587,15 +587,32 @@
             });
           });
         } else if (data.gguf_files && data.gguf_files.length) {
-          var html = '';
-          data.gguf_files.forEach(function(f) {
+          var htmlPromises = data.gguf_files.map(function(f) {
             var label = stripQuantization(f);
-            if (!label) label = f.replace(/\.gguf$/i, '').split('-').pop() || f;
-            html += '<button type="button" class="btn quant-btn" data-repo="' + (data.repo_id).replace(/"/g, '&quot;') + '" data-filenames="' + escapeHtml(f) + '">' + escapeHtml(label) + '</button>';
+            if (!label) label = f.replace(/\\.gguf$/i, '').split('-').pop() || f;
+            
+            return fetch('/api/models/check?repo_id=' + encodeURIComponent(data.repo_id) + '&filename=' + encodeURIComponent(f))
+              .then(r => r.json())
+              .then(checkData => {
+                var btnStyle = checkData.downloaded ? 'font-style: italic;' : 'font-weight: bold;';
+                var btnTitle = checkData.downloaded ? 'Quantized model already downloaded' : 'Click to download Quantized Model';
+                var btnClass = checkData.downloaded ? 'btn quant-btn downloaded' : 'btn quant-btn';
+                return '<button type="button" class="' + btnClass + '" style="' + btnStyle + '" title="' + btnTitle + '" data-downloaded="' + checkData.downloaded + '" data-repo="' + escapeHtml(data.repo_id) + '" data-filenames="' + escapeHtml(f) + '">' + escapeHtml(label) + '</button>';
+              });
           });
-          rightContent.innerHTML = html;
-          rightContent.querySelectorAll('.quant-btn').forEach(function(btn) {
-            btn.addEventListener('click', function() { startDownload(btn.dataset.repo, btn.dataset.filenames); });
+          
+          Promise.all(htmlPromises).then(function(buttonsHtml) {
+            rightContent.innerHTML = buttonsHtml.join('');
+            rightContent.querySelectorAll('.quant-btn').forEach(function(btn) {
+              btn.addEventListener('click', function() {
+                if (btn.dataset.downloaded === "true") {
+                  if (!confirm("This quantized model is already downloaded. Do you want to re-download it?")) {
+                    return;
+                  }
+                }
+                startDownload(btn.dataset.repo, btn.dataset.filenames);
+              });
+            });
           });
         } else {
           rightContent.innerHTML = '<p class="right-placeholder">No .gguf files.</p>';
