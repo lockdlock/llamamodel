@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}My Models – LLM Manager{% endblock %}
 {% block head %}
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 <style>
   /* Override default container width for this page */
   .container { max-width: 100% !important; margin: 0; padding: 1.5rem; }
@@ -23,6 +24,51 @@
       max-width: 50%;
       overflow-y: auto;
       padding-left: 1rem;
+      position: relative; /* For sticky header positioning */
+  }
+  
+  /* Add Parameter Sticky Search Header */
+  .sticky-param-search {
+      position: sticky;
+      top: -1.5rem; /* Match container padding to flush nicely if overscrolls */
+      background: var(--bg);
+      z-index: 10;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--muted);
+      margin-bottom: 1.5rem;
+  }
+  
+  /* Select2 Dark Theme Adjustments */
+  .select2-container--default .select2-selection--single {
+      background-color: var(--card);
+      border: 1px solid var(--muted);
+      border-radius: 4px;
+      height: 38px;
+  }
+  .select2-container--default .select2-selection--single .select2-selection__rendered {
+      color: var(--fg);
+      line-height: 36px;
+      font-size: 0.9rem;
+  }
+  .select2-container--default .select2-selection--single .select2-selection__arrow {
+      height: 36px;
+  }
+  .select2-dropdown {
+      background-color: var(--card);
+      border: 1px solid var(--muted);
+  }
+  .select2-results__option {
+      color: var(--fg);
+      font-size: 0.85rem;
+  }
+  .select2-container--default .select2-results__option--highlighted[aria-selected] {
+      background-color: var(--accent);
+      color: var(--bg);
+  }
+  .select2-search--dropdown .select2-search__field {
+      background-color: var(--bg);
+      color: var(--fg);
+      border: 1px solid var(--muted);
   }
   
   .model-card-item {
@@ -67,7 +113,121 @@
   .info-table th { text-align: left; padding: 0.5rem 1rem 0.5rem 0; color: var(--muted); font-weight: normal; }
   .info-table td { padding: 0.5rem 0; font-family: monospace; }
 </style>
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 <script>
+    // Dictionary of allowed params from llama.cpp docs (Common, Sample, Server-specific)
+    // Only includes options with >1 character name, minus dashes. "Explanation" column used for descriptions
+    const availableParams = [
+        // Common Params
+        { id: "model", text: "model", desc: "model path" },
+        { id: "model-url", text: "model-url", desc: "model download url" },
+        { id: "alias", text: "alias", desc: "set alias for model name" },
+        { id: "ctx-size", text: "ctx-size", desc: "size of the prompt context" },
+        { id: "seed", text: "seed", desc: "RNG seed" },
+        { id: "batch-size", text: "batch-size", desc: "logical maximum batch size" },
+        { id: "ubatch-size", text: "ubatch-size", desc: "physical maximum batch size" },
+        { id: "threads", text: "threads", desc: "number of threads to use during generation" },
+        { id: "threads-batch", text: "threads-batch", desc: "number of threads to use during batch and prompt processing" },
+        { id: "threads-draft", text: "threads-draft", desc: "number of threads to use during generation" },
+        { id: "threads-batch-draft", text: "threads-batch-draft", desc: "number of threads to use during batch and prompt processing" },
+        { id: "lookup-cache-static", text: "lookup-cache-static", desc: "path to static lookup cache to use for APIR" },
+        { id: "lookup-cache-dynamic", text: "lookup-cache-dynamic", desc: "path to dynamic lookup cache to use for APIR" },
+        { id: "system-prompt-file", text: "system-prompt-file", desc: "Set a file to load a system prompt" },
+        { id: "n-predict", text: "n-predict", desc: "number of tokens to predict" },
+        { id: "n-gpu-layers", text: "n-gpu-layers", desc: "number of layers to store in VRAM" },
+        { id: "n-gpu-layers-draft", text: "n-gpu-layers-draft", desc: "number of layers to store in VRAM for the draft model" },
+        { id: "split-mode", text: "split-mode", desc: "how to split the model across multiple GPUs" },
+        { id: "tensor-split", text: "tensor-split", desc: "fraction of the model to offload to each GPU" },
+        { id: "main-gpu", text: "main-gpu", desc: "the GPU to use for the model" },
+        { id: "rpc", text: "rpc", desc: "comma separated list of RPC servers" },
+        
+        // Sampling Params
+        { id: "params-n", text: "params-n", desc: "number of parameters to offload" },
+        { id: "top-k", text: "top-k", desc: "top-k sampling" },
+        { id: "top-p", text: "top-p", desc: "top-p sampling" },
+        { id: "min-p", text: "min-p", desc: "min-p sampling" },
+        { id: "tfs", text: "tfs", desc: "tail free sampling, parameter z" },
+        { id: "typical", text: "typical", desc: "locally typical sampling, parameter p" },
+        { id: "repeat-last-n", text: "repeat-last-n", desc: "last n tokens to consider for penalize" },
+        { id: "repeat-penalty", text: "repeat-penalty", desc: "penalize repeat sequence of tokens" },
+        { id: "presence-penalty", text: "presence-penalty", desc: "repeat alpha presence penalty" },
+        { id: "frequency-penalty", text: "frequency-penalty", desc: "repeat alpha frequency penalty" },
+        { id: "dry-multiplier", text: "dry-multiplier", desc: "set DRY sampling multiplier" },
+        { id: "dry-base", text: "dry-base", desc: "set DRY sampling base value" },
+        { id: "dry-allowed-length", text: "dry-allowed-length", desc: "set allowed length for DRY sampling" },
+        { id: "dry-penalty-last-n", text: "dry-penalty-last-n", desc: "set DRY penalty for the last n tokens" },
+        { id: "dry-sequence-breaker", text: "dry-sequence-breaker", desc: "add sequence breaker for DRY sampling" },
+        { id: "dynatemp-range", text: "dynatemp-range", desc: "dynamic temperature range" },
+        { id: "dynatemp-exp", text: "dynatemp-exp", desc: "dynamic temperature exponent" },
+        { id: "mirostat", text: "mirostat", desc: "use Mirostat sampling." },
+        { id: "mirostat-lr", text: "mirostat-lr", desc: "Mirostat learning rate, parameter eta" },
+        { id: "mirostat-ent", text: "mirostat-ent", desc: "Mirostat target entropy, parameter tau" },
+        { id: "logit-bias", text: "logit-bias", desc: "modifies the likelihood of token appearing in the completion" },
+        { id: "grammar", text: "grammar", desc: "BNF-like grammar to constrain generations" },
+        { id: "grammar-file", text: "grammar-file", desc: "file to read grammar from" },
+        { id: "penalty-prompt", text: "penalty-prompt", desc: "override the prompt for penalty evaluation" },
+        { id: "ignore-eos", text: "ignore-eos", desc: "ignore end of stream token and continue generating" },
+        { id: "no-penalize-nl", text: "no-penalize-nl", desc: "do not penalize newline token" },
+        { id: "temp", text: "temp", desc: "temperature" },
+        { id: "samplers", text: "samplers", desc: "samplers that will be used for generation in the order" },
+        { id: "xtc-probability", text: "xtc-probability", desc: "xtc probability" },
+        { id: "xtc-threshold", text: "xtc-threshold", desc: "xtc threshold" },
+        
+        // Server-specific params
+        { id: "host", text: "host", desc: "ip address to listen" },
+        { id: "port", text: "port", desc: "port to listen" },
+        { id: "path", text: "path", desc: "path to serve static files from" },
+        { id: "embedding", text: "embedding", desc: "enable embedding vector output" },
+        { id: "api-key", text: "api-key", desc: "api key to use for authentication" },
+        { id: "api-key-file", text: "api-key-file", desc: "path to file containing api keys" },
+        { id: "ssl-key-file", text: "ssl-key-file", desc: "path to file a PEM-encoded SSL private key" },
+        { id: "ssl-cert-file", text: "ssl-cert-file", desc: "path to file a PEM-encoded SSL certificate" },
+        { id: "timeout", text: "timeout", desc: "server read/write timeout in seconds" },
+        { id: "threads-http", text: "threads-http", desc: "number of threads used to process HTTP requests" },
+        { id: "system-prompt-file-server", text: "system-prompt-file", desc: "Set a file to load a system prompt" },
+        { id: "metrics", text: "metrics", desc: "enable prometheus compatible metrics endpoint" },
+        { id: "strict-format", text: "strict-format", desc: "ensure strict formatting of variables" },
+        { id: "jinja", text: "jinja", desc: "enable/disable Jinja templating" },
+        { id: "mlock", text: "mlock", desc: "force system to keep model in RAM rather than swapping or compressing" },
+        { id: "no-mmap", text: "no-mmap", desc: "do not memory-map model" },
+        { id: "numa", text: "numa", desc: "attempt optimizations that help on some NUMA systems" },
+        { id: "control-vector", text: "control-vector", desc: "add a control vector" },
+        { id: "control-vector-scaled", text: "control-vector-scaled", desc: "add a control vector with user defined scaling" },
+        { id: "control-vector-layer-range", text: "control-vector-layer-range", desc: "layer range to apply the control vector(s) to" },
+        { id: "lora", text: "lora", desc: "apply LoRA adapter" },
+        { id: "lora-scaled", text: "lora-scaled", desc: "apply LoRA adapter with user defined scaling" },
+        { id: "lora-init-without-apply", text: "lora-init-without-apply", desc: "load LoRA adapters without applying them" },
+        { id: "pooling", text: "pooling", desc: "pooling type for embeddings" },
+        { id: "attention", text: "attention", desc: "attention type" },
+        { id: "grp-attn-n", text: "grp-attn-n", desc: "group-attention factor" },
+        { id: "grp-attn-w", text: "grp-attn-w", desc: "group-attention width" },
+        { id: "rope-scaling", text: "rope-scaling", desc: "RoPE frequency scaling method" },
+        { id: "rope-scale", text: "rope-scale", desc: "RoPE context scaling factor" },
+        { id: "rope-freq-base", text: "rope-freq-base", desc: "RoPE base frequency" },
+        { id: "rope-freq-scale", text: "rope-freq-scale", desc: "RoPE frequency scaling factor" },
+        { id: "yarn-orig-ctx", text: "yarn-orig-ctx", desc: "YaRN: original context size of model" },
+        { id: "yarn-ext-factor", text: "yarn-ext-factor", desc: "YaRN: extrapolation mix factor" },
+        { id: "yarn-attn-factor", text: "yarn-attn-factor", desc: "YaRN: scale sqrt(t) or attention magnitude" },
+        { id: "yarn-beta-fast", text: "yarn-beta-fast", desc: "YaRN: low dimensions scaling factor" },
+        { id: "yarn-beta-slow", text: "yarn-beta-slow", desc: "YaRN: high dimensions scaling factor" },
+        { id: "defrag-thold", text: "defrag-thold", desc: "KV cache defragmentation threshold" },
+        { id: "cont-batching", text: "cont-batching", desc: "enable continuous batching" },
+        { id: "flash-attn", text: "flash-attn", desc: "enable Flash Attention" },
+        { id: "chat-template", text: "chat-template", desc: "set chat template" },
+        { id: "slot-save-path", text: "slot-save-path", desc: "path to save slot kv cache" },
+        { id: "slot-prompt-similarity", text: "slot-prompt-similarity", desc: "how much the prompt of a request must match the prompt of a slot in order to use it" },
+        { id: "b", text: "b", desc: "logical maximum batch size" },
+        { id: "ub", text: "ub", desc: "physical maximum batch size" },
+        { id: "c", text: "c", desc: "size of the prompt context" },
+        { id: "s", text: "s", desc: "RNG seed" },
+        { id: "t", text: "t", desc: "number of threads to use during generation" },
+        { id: "tb", text: "tb", desc: "number of threads to use during batch and prompt processing" },
+        { id: "cb", text: "cb", desc: "enable continuous batching" },
+        { id: "fa", text: "fa", desc: "enable flash attention" },
+        { id: "vision-gemma-12b-default", text: "vision-gemma-12b-default", desc: "use pali gemma base default templates" }
+    ];
+
     function selectModel(modelId) {
         document.querySelectorAll('.model-card-item').forEach(el => el.classList.remove('selected'));
         var card = document.getElementById('card-' + modelId);
@@ -87,6 +247,105 @@
     document.addEventListener("DOMContentLoaded", function() {
         // Automatically select the 'General Parameters' block on load
         selectModel('general');
+        
+        function matchParamSearch(params, data) {
+            // Return null if there are no search terms
+            if ($.trim(params.term) === '') {
+                return data;
+            }
+
+            // Skip if there is no 'text' or 'element' associated with the data
+            if (typeof data.text === 'undefined') {
+                return null;
+            }
+
+            var searchTerm = params.term.toLowerCase();
+            var text = data.text.toLowerCase();
+            var desc = ($(data.element).data('desc') || '').toLowerCase();
+
+            if (text.indexOf(searchTerm) > -1 || desc.indexOf(searchTerm) > -1) {
+                return data;
+            }
+
+            return null;
+        }
+
+        // Initialize Add Parameter Select2 dropdowns on ALL parameter forms
+        // For inline insertion we append an Option into the currently active model parameters list
+        $('.add-param-select').select2({
+            placeholder: 'Search for a parameter to add...',
+            allowClear: true,
+            matcher: matchParamSearch,
+            templateResult: formatParamSearchResult,
+            templateSelection: formatParamSearchResult
+        });
+        
+        function formatParamSearchResult(param) {
+          if (!param.id) return param.text;
+          var desc = $(param.element).data('desc') || param.desc;
+          return $('<span><strong>' + param.text + '</strong> <small style="color:var(--muted); margin-left:10px;">' + (desc || '') + '</small></span>');
+        }
+
+        // Populate options in all selects
+        $('.add-param-select').each(function() {
+            var $select = $(this);
+            $.each(availableParams, function(i, p) {
+                var option = new Option(p.text, p.id, false, false);
+                $(option).attr('data-desc', p.desc);
+                $select.append(option);
+            });
+            $select.trigger('change');
+            
+                // On select, we inject a new editable row
+                $select.on('select2:select', function(e) {
+                    var selectedId = e.params.data.id;
+                    var paramText = e.params.data.text;
+                    var paramVal = selectedId === paramText ? "" : ""; // For preset default values if we decide to add them later, default to empty
+                    
+                    var $activeDetailPane = $('.model-details.active');
+                    if ($activeDetailPane.length === 0 || $activeDetailPane.attr('id') === 'empty-state') {
+                        // Nothing selected
+                        alert("Please select a model from the list first.");
+                        $(this).val(null).trigger('change');
+                        return;
+                    }
+                    
+                    var $form = $activeDetailPane.find('form');
+                    var $ul = $form.find('ul');
+                    
+                // Formulate the backend variable name
+                // If it's the duplicate ID we handle the display cleanly for both
+                var paramKeyStr = paramText;
+                
+                // Check if already in the list
+                if ($form.find('input[name="param_' + paramKeyStr + '"]').length > 0) {
+                    alert('Parameter ' + paramKeyStr + ' is already configured for this item.');
+                        $(this).val(null).trigger('change');
+                        return;
+                    }
+                    
+                    // Add new row element programmatically
+                    var newLi = `
+                        <li style="margin-bottom: 0.45rem; display: flex; align-items: center;">
+                            <code style="color: #7dcfff; background: rgba(125, 207, 255, 0.1); width: 225px; flex-shrink: 0; padding: 0.27rem 0.45rem; margin-right: 0.45rem; font-size: 0.81rem;" title="${paramText}">${paramKeyStr}</code>
+                            <span style="color: var(--fg); flex-grow: 1;">
+                                <input type="text" name="param_${paramKeyStr}" value="${paramVal}" class="param-input" style="width: 100%; border: 1px solid var(--accent); background: var(--bg); color: var(--fg); padding: 0.18rem 0.45rem; border-radius: 3px; font-size: 0.855rem;" placeholder="Enter value for ${paramText}..." autofocus>
+                            </span>
+                            <button type="button" class="btn btn-secondary" style="margin-left: 0.45rem; padding: 0.18rem 0.45rem; background: transparent; color: #f7768e; border: 1px solid rgba(247, 118, 142, 0.4); font-size: 0.765rem;" onclick="removeParam(this)">✕</button>
+                        </li>
+                    `;
+                    
+                    $ul.append(newLi);
+                    
+                    // Trigger save buttons appearance automatically
+                    $form.find('.param-save-btn').show();
+                    $form.find('.param-cancel-btn').show();
+                    
+                    // Reset select2 and focus on the new input
+                    $(this).val(null).trigger('change');
+                    $ul.find('input').last().focus();
+                });
+        });
     });
 
     function deleteModel(name) {
@@ -203,6 +462,21 @@
 
   <!-- Right Pane: Model Details -->
   <div class="details-pane">
+      
+      <!-- Sticky Add Parameter Header for the Details Pane Context -->
+      <div class="sticky-param-search card" style="background: rgba(36, 40, 59, 0.85); backdrop-filter: blur(10px); border: 1px solid var(--accent); position: sticky; top: -1.5rem;">
+          <label style="display: block; margin-bottom: 0.5rem; font-weight: bold; color: var(--accent);">Add Parameter Options</label>
+          <!-- Using a simple form container just to capture select2 actions, it injects items into the specific item form underneath -->
+          <div style="display: flex; gap: 1rem; align-items: flex-start;">
+              <div style="flex: 1; min-width: 300px;">
+                  <select class="add-param-select" style="width: 100%;">
+                      <option></option>
+                  </select>
+              </div>
+          </div>
+          <p class="muted" style="margin-top: 0.5rem; margin-bottom: 0; font-size: 0.8rem;">Select an argument; it will be appended and mapped to uppercase <code>LLAMA_ARG_*</code> for the currently viewed model below.</p>
+      </div>
+
       <div id="empty-state" class="model-details" style="text-align: center; margin-top: 5rem; color: var(--muted);">
           <p>Select an item from the list to view its configuration.</p>
       </div>
@@ -216,7 +490,6 @@
                       Global overrides for <code>llama.cpp</code> server
                   </div>
               </div>
-              <a href="/models/edit/GENERAL_PARAMS" class="btn" style="font-size: 0.9rem;">Edit Configuration</a>
           </div>
           
           <div class="card" style="background: rgba(36, 40, 59, 0.5);">
@@ -259,7 +532,6 @@
                       {{ s.display.quantization }}
                   </div>
               </div>
-              <a href="/models/edit/{{ s.name | urlencode }}" class="btn" style="font-size: 0.9rem;">Edit Configuration</a>
           </div>
           
           <h3 style="margin-top: 2rem;">Current Parameters</h3>
