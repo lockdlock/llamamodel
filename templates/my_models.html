@@ -209,24 +209,6 @@
               <a href="/models/edit/{{ s.name | urlencode }}" class="btn" style="font-size: 0.9rem;">Edit Configuration</a>
           </div>
           
-          <div class="card" style="background: rgba(36, 40, 59, 0.5);">
-              <h3 style="margin-top: 0; font-size: 1.1rem;">File Information</h3>
-              <table class="info-table" style="width: 100%; border-collapse: collapse;">
-                  <tr>
-                      <th style="width: 120px;">File Name</td>
-                      <td>{{ s.display.file_name }}</td>
-                  </tr>
-                  <tr>
-                      <th>File Size</td>
-                      <td>{{ s.display.file_size }}</td>
-                  </tr>
-                  <tr>
-                      <th>INI Section</td>
-                      <td style="color: var(--accent);">[{{ s.name }}]</td>
-                  </tr>
-              </table>
-          </div>
-          
           <h3 style="margin-top: 2rem;">Current Parameters</h3>
           {% if s.params %}
           <div class="card">
