@@ -25,11 +25,27 @@ MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024 * 1024
 
 
 def _sanitize_section_name(repo_id: str, filename: str) -> str:
-    """Derive a valid [section] name from repo and filename."""
-    base = filename.removesuffix(".gguf").strip()
-    if not base:
-        base = repo_id.replace("/", "-")
-    return (repo_id.replace("/", "-") + "-" + base).replace(" ", "_")[:80]
+    """Derive a valid [section] name from repo and filename: <author>/<model card name>:<quantization>"""
+    from app.services.hf_service import _extract_quantization
+    import re
+    
+    quant = _extract_quantization(filename)
+    if quant:
+        # safely extract the string right before the quantization tag
+        esc_quant = re.escape(quant)
+        m = re.search(r"[-.]" + esc_quant + r"(?:\.gguf)?", filename, flags=re.IGNORECASE)
+        if m:
+            card_name = filename[:m.start()]
+        else:
+            card_name = filename.replace(".gguf", "")
+    else:
+        card_name = filename.replace(".gguf", "")
+        quant = "unknown"
+        
+    # Assuming repo_id is "author/repo"
+    author = repo_id.split("/")[0] if "/" in repo_id else "unknown"
+        
+    return f"{author}/{card_name}:{quant}"
 
 
 def _validate_repo_id(repo_id: str) -> None:
@@ -217,12 +233,15 @@ async def api_download(
             
             _download_jobs[job_id]["path"] = str(first_path)
             _download_jobs[job_id]["status"] = "completed"
-            model_card = hf_service.get_model_card_content(repo_id)
-            recommended = params_parser.recommended_params_with_defaults(model_card)
             section = section_name or _sanitize_section_name(repo_id, to_download[0])
             ini_path = get_models_ini_path(models_dir)
-            recommended["LLAMA_ARG_MODEL"] = str(first_path)
-            ini_manager.add_or_update_section(ini_path, section, recommended, merge=True)
+            
+            # Setup only the requested model parameter and its description
+            # The path to model file should be saved between single quotes in the models.ini
+            recommended = {"model": f"'{str(first_path)}'"}
+            param_descriptions = {"model": "model path to load"}
+            
+            ini_manager.add_or_update_section(ini_path, section, recommended, merge=True, param_descriptions=param_descriptions)
             logger.info(
                 "Download completed: job_id=%s section='%s' path=%s",
                 job_id, section, first_path,

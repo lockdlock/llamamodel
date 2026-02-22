@@ -1,5 +1,5 @@
 /**
- * LLM Manager – shared JS utilities
+ * LlamaModel, – shared JS utilities
  * Loaded via <script src="/static/app.js"> in base.html (optional; pages may inline their own JS).
  */
 

@@ -56,8 +56,12 @@ async def my_models_page(request: Request):
     enriched_sections = []
     
     for s in sections:
-        model_path_str = s["params"].get("LLAMA_ARG_MODEL")
+        model_path_str = s["params"].get("model") or s["params"].get("LLAMA_ARG_MODEL")
         if model_path_str:
+            # Strip enclosing single quotes if they exist before checking resolution
+            if model_path_str.startswith("'") and model_path_str.endswith("'"):
+                model_path_str = model_path_str[1:-1]
+                
             resolved = Path(model_path_str).resolve()
             configured_paths.add(str(resolved))
             file_name = resolved.name
@@ -127,14 +131,34 @@ async def add_local_model(request: Request, path: str = Form(...)):
     if not gguf_path.exists():
         raise HTTPException(status_code=400, detail="File not found")
     
-    section_name = gguf_path.name.replace(".gguf", "")
+    # Use exact same parsing structure as download
+    from app.services.hf_service import _extract_quantization
+    import re
+    
+    filename = gguf_path.name
+    quant = _extract_quantization(filename)
+    if quant:
+        esc_quant = re.escape(quant)
+        m = re.search(r"[-.]" + esc_quant + r"(?:\.gguf)?", filename, flags=re.IGNORECASE)
+        if m:
+            card_name = filename[:m.start()]
+        else:
+            card_name = filename.replace(".gguf", "")
+    else:
+        card_name = filename.replace(".gguf", "")
+        quant = "unknown"
+        
+    section_name = f"local/{card_name}:{quant}"
+    
     ini_path = _ini_path()
-    params = {"LLAMA_ARG_MODEL": str(gguf_path.resolve())}
-    ini_manager.add_or_update_section(ini_path, section_name, params, merge=True)
+    # The path to model file should be saved between single quotes in the models.ini
+    params = {"model": f"'{str(gguf_path.resolve())}'"}
+    param_descriptions = {"model": "model path to load"}
+    ini_manager.add_or_update_section(ini_path, section_name, params, merge=True, param_descriptions=param_descriptions)
     return RedirectResponse(url="/models", status_code=303)
 
 
-@router.get("/edit/{section_name}", response_class=HTMLResponse)
+@router.get("/edit/{section_name:path}", response_class=HTMLResponse)
 async def edit_model_page(request: Request, section_name: str):
     """Edit one model section."""
     logger.debug("GET /models/edit/%s", section_name)
@@ -163,7 +187,7 @@ async def edit_model_page(request: Request, section_name: str):
     )
 
 
-@router.post("/edit/{section_name}")
+@router.post("/edit/{section_name:path}")
 async def save_model(section_name: str, request: Request, inline: int = 0):
     """Save model section from form. Form keys: param_<key> = value; optional new_param_key, new_param_value."""
     logger.debug("POST /models/edit/%s", section_name)
@@ -219,9 +243,10 @@ async def save_model(section_name: str, request: Request, inline: int = 0):
     return RedirectResponse(url="/models", status_code=303)
 
 
-@router.get("/delete/{section_name}")
+@router.get("/delete/{section_name:path}")
 async def delete_model(section_name: str):
-    """Remove model section and associated file."""
+    """Remove model section and associated file.
+    Note: We map {section_name:path} to handle forward slashes naturally for our author/model convention."""
     logger.debug("GET /models/delete/%s", section_name)
     path = _ini_path()
     
@@ -229,8 +254,12 @@ async def delete_model(section_name: str):
     params = ini_manager.get_section(path, section_name)
     file_deleted = False
     
-    if params and "LLAMA_ARG_MODEL" in params:
-        file_route = Path(params["LLAMA_ARG_MODEL"]).resolve()
+    if params and ("model" in params or "LLAMA_ARG_MODEL" in params):
+        model_path_str = params.get("model") or params.get("LLAMA_ARG_MODEL")
+        if model_path_str.startswith("'") and model_path_str.endswith("'"):
+            model_path_str = model_path_str[1:-1]
+            
+        file_route = Path(model_path_str).resolve()
         if file_route.exists() and file_route.is_file():
             try:
                 os.remove(file_route)

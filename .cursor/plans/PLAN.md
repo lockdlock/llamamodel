@@ -1,11 +1,11 @@
 ---
-name: LLM Manager Web App
+name: LlamaModel, Web App
 overview: "Build a Python web application that provides LMStudio-like model management for llama.cpp: search and browse GGUF models on Hugging Face, download selected quantizations via the Hub API, and maintain a models.ini file with recommended/default parameters. The app will be configurable (port, models directory) and use the standard Hugging Face cache by default."
 todos: []
 isProject: false
 ---
 
-# LLM Manager Web Application for llama.cpp
+# LlamaModel, Web Application for llama.cpp
 
 ## Scope and constraints
 

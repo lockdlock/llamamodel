@@ -1,7 +1,7 @@
-# Architecture: LLM Manager
+# Architecture: LlamaModel
 
 ## Overview
-The LLM Manager is a Python-based web application providing an LMStudio-like interface designed to manage GGUF models for `llama.cpp`. It interacts with the Hugging Face Hub to discover, inspect, and download models, while maintaining a `models.ini` configuration file that defines loading parameters for the `llama.cpp` server.
+The LlamaModel, is a Python-based web application providing an LMStudio-like interface designed to manage GGUF models for `llama.cpp`. It interacts with the Hugging Face Hub to discover, inspect, and download models, while maintaining a `models.ini` configuration file that defines loading parameters for the `llama.cpp` server.
 
 ## Graphical Architecture Block Diagram
 

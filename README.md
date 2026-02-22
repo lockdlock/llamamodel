@@ -1,4 +1,4 @@
-# LLM Manager
+# LlamaModel,
 
 A Python web application to manage large language models for **llama.cpp** servers: search and browse GGUF models on Hugging Face, download selected quantizations, and maintain a `models.ini` file compatible with the llama.cpp server.
 

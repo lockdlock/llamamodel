@@ -1,4 +1,4 @@
-"""Run the LLM Manager web app. Uses port and config from config.yaml / env."""
+"""Run the LlamaModel, web app. Uses port and config from config.yaml / env."""
 
 import logging
 import uvicorn
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 if __name__ == "__main__":
     config = load_config()
     port = config["port"]
-    logger.info("Starting LLM Manager on port %d (models_dir=%s)", port, config["models_dir"])
+    logger.info("Starting LlamaModel, on port %d (models_dir=%s)", port, config["models_dir"])
     uvicorn.run(
         "app.main:app",
         host="0.0.0.0",

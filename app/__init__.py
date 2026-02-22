@@ -1,1 +1,1 @@
-# LLM Manager for llama.cpp
+# LlamaModel, for llama.cpp

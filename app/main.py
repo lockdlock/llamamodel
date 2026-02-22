@@ -4,7 +4,7 @@ import logging
 from pathlib import Path
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -12,7 +12,7 @@ from app.config import load_config, get_models_ini_path
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="LLM Manager", description="Manage GGUF models for llama.cpp")
+app = FastAPI(title="LlamaModel,", description="Manage GGUF models for llama.cpp")
 
 _config: dict | None = None
 
@@ -38,11 +38,11 @@ if _static_dir.exists():
     logger.debug("Static files mounted from %s", _static_dir)
 
 
-@app.get("/", response_class=HTMLResponse)
+@app.get("/", response_class=RedirectResponse)
 async def index(request: Request):
-    """Home page."""
-    logger.debug("GET /")
-    return templates.TemplateResponse("index.html", {"request": request})
+    """Redirect to My Models page natively."""
+    logger.debug("GET / -> Redirecting to /models")
+    return RedirectResponse(url="/models", status_code=303)
 
 
 # Routes will be registered by including routers
