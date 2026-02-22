@@ -31,8 +31,6 @@
       justify-content: space-between;
       align-items: center;
       transition: background 0.2s;
-      padding: 0.8rem 1rem; /* Reduced from default 1rem padding of .card to shrink height approx 80% */
-      margin-bottom: 0.8rem;
   }
   .model-card-item:hover {
       background: rgba(122, 162, 247, 0.1);
@@ -237,7 +235,7 @@
                         <span style="color: var(--fg); flex-grow: 1;">
                             <input type="text" name="param_{{ k }}" value="{{ v }}" class="param-input" style="width: 100%; border: 1px solid var(--muted); background: var(--bg); color: var(--fg); padding: 0.18rem 0.45rem; border-radius: 3px; font-size: 0.855rem;">
                         </span>
-                        <button type="button" class="btn btn-secondary" style="margin-left: 0.45rem; padding: 0.18rem 0.45rem; background: transparent; color: #f7768e; border: 1px solid rgba(247, 118, 142, 0.4); font-size: 0.765rem;" onclick="removeParam(this)">Delete</button>
+                        <button type="button" class="btn btn-secondary" style="margin-left: 0.45rem; padding: 0.18rem 0.45rem; background: transparent; color: #f7768e; border: 1px solid rgba(247, 118, 142, 0.4); font-size: 0.765rem;" onclick="removeParam(this)">✕</button>
                     </li>
                     {% endfor %}
                   </ul>
@@ -275,7 +273,7 @@
                         <span style="color: var(--fg); flex-grow: 1;">
                             <input type="text" name="param_{{ k }}" value="{{ v }}" class="param-input" style="width: 100%; border: 1px solid var(--muted); background: var(--bg); color: var(--fg); padding: 0.18rem 0.45rem; border-radius: 3px; font-size: 0.855rem;">
                         </span>
-                        <button type="button" class="btn btn-secondary" style="margin-left: 0.45rem; padding: 0.18rem 0.45rem; background: transparent; color: #f7768e; border: 1px solid rgba(247, 118, 142, 0.4); font-size: 0.765rem;" onclick="removeParam(this)">Delete</button>
+                        <button type="button" class="btn btn-secondary" style="margin-left: 0.45rem; padding: 0.18rem 0.45rem; background: transparent; color: #f7768e; border: 1px solid rgba(247, 118, 142, 0.4); font-size: 0.765rem;" onclick="removeParam(this)">✕</button>
                     </li>
                     {% endfor %}
                   </ul>
