@@ -21,4 +21,23 @@
 {% else %}
 <p class="muted">No models in models.ini yet. Download a model from Discover to add one.</p>
 {% endif %}
+
+{% if unconfigured_files %}
+<h2 style="margin-top: 2rem;">Unconfigured Local Models</h2>
+<p class="muted">These GGUF files were found in your models directory but are not in <code>models.ini</code>.</p>
+<ul style="list-style: none; padding: 0;">
+  {% for f in unconfigured_files %}
+  <li class="card" style="display: flex; justify-content: space-between; align-items: center;">
+    <div>
+      <strong>{{ f.name }}</strong><br>
+      <small class="muted" style="word-break: break-all;">{{ f.path }}</small>
+    </div>
+    <form action="/models/add_local" method="POST" style="margin: 0;">
+      <input type="hidden" name="path" value="{{ f.path }}">
+      <button type="submit" class="btn btn-primary">Add to models.ini</button>
+    </form>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}
 {% endblock %}

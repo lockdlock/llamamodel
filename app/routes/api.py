@@ -2,6 +2,7 @@
 
 import logging
 import os
+import re
 import time
 from pathlib import Path
 
@@ -19,6 +20,9 @@ router = APIRouter()
 # In-memory download status: job_id -> {status, path?, error?}
 _download_jobs: dict[str, dict] = {}
 
+# Maximum file size: 100GB (reasonable for large models)
+MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024 * 1024
+
 
 def _sanitize_section_name(repo_id: str, filename: str) -> str:
     """Derive a valid [section] name from repo and filename."""
@@ -26,6 +30,29 @@ def _sanitize_section_name(repo_id: str, filename: str) -> str:
     if not base:
         base = repo_id.replace("/", "-")
     return (repo_id.replace("/", "-") + "-" + base).replace(" ", "_")[:80]
+
+
+def _validate_repo_id(repo_id: str) -> None:
+    """Validate repo_id format to prevent path traversal attacks."""
+    if not repo_id or len(repo_id) > 200:
+        raise HTTPException(status_code=400, detail="Invalid repo_id")
+    # HuggingFace repo IDs must match pattern: namespace/model-name
+    # Allow alphanumeric, hyphen, underscore, and forward slash
+    pattern = r"^[a-zA-Z0-9]([a-zA-Z0-9._-]*[a-zA-Z0-9])?/[a-zA-Z0-9]([a-zA-Z0-9._-]*[a-zA-Z0-9])?$"
+    if not re.match(pattern, repo_id):
+        raise HTTPException(status_code=400, detail="Invalid repo_id format")
+
+
+def _validate_filename(filename: str) -> None:
+    """Validate filename to prevent path traversal attacks."""
+    if not filename or len(filename) > 255:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    # Only allow safe filenames - no path separators, no parent directory references
+    if '..' in filename or '/' in filename or '\\' in filename:
+        raise HTTPException(status_code=400, detail="Invalid filename: path traversal not allowed")
+    # Must be a GGUF file
+    if not filename.lower().endswith('.gguf'):
+        raise HTTPException(status_code=400, detail="Only .gguf files are allowed")
 
 
 @router.get("/search")
@@ -53,11 +80,10 @@ async def api_search(
     # Parse [tag_name] syntax from query
     tag_filter: str | None = tag
     text_query: str | None = q
-    if q:
-        import re as _re
-        m = _re.match(r"^\[(.+)\]$", q.strip())
-        if m:
-            tag_filter = m.group(1).strip()
+    if q and q.strip().startswith("[") and q.strip().endswith("]"):
+        potential_tag = q.strip()[1:-1]
+        if potential_tag:
+            tag_filter = potential_tag
             text_query = None
 
     # capabilities sort is client-side; use downloads for HF API
@@ -65,13 +91,13 @@ async def api_search(
 
     items = hf_service.search_models(
         query=text_query,
-        limit=limit * 3,  # fetch extra to allow client-side filtering
-        offset=offset,
+        limit=limit + offset,  # fetch enough to slice
+        offset=0,
         sort=api_sort,
         tag_filter=tag_filter,
     )
 
-    # Apply capability filters (server-side after fetch)
+    # Filter by capabilities if requested
     if vision is not None:
         items = [m for m in items if bool(m.get("vision")) == vision]
     if tools is not None:
@@ -79,26 +105,9 @@ async def api_search(
     if thinking is not None:
         items = [m for m in items if bool(m.get("thinking")) == thinking]
 
-    # Apply server-side sort for non-HF-native sorts (direction handled client-side)
-    if sort == "likes":
-        items.sort(key=lambda m: m.get("likes", 0), reverse=True)
-    elif sort == "name":
-        items.sort(key=lambda m: m.get("repo_name", "").lower())
-    elif sort == "author":
-        items.sort(key=lambda m: m.get("author", "").lower())
-    elif sort == "size":
-        import re as _re2
-        def _size_key(m):
-            s = m.get("size_display", "") or ""
-            mm = _re2.match(r"(\d+\.?\d*)\s*([BbMm])", s)
-            if mm:
-                v = float(mm.group(1))
-                return v * 1e9 if mm.group(2).upper() == "B" else v * 1e6
-            return 0
-        items.sort(key=_size_key, reverse=True)
-    elif sort == "capabilities":
-        items.sort(key=lambda m: sum([bool(m.get("vision")), bool(m.get("tools")), bool(m.get("thinking"))]), reverse=True)
-
+    # Handle offset/limit manually since we might filter results
+    total = len(items)  # approximate total from this fetch
+    items = items[offset:]
     items = items[:limit]
     logger.debug("GET /api/search returned %d models", len(items))
     return {"models": items}
@@ -165,9 +174,12 @@ async def api_download(
         to_download = [filename.strip()]
     else:
         raise HTTPException(status_code=400, detail="Provide filename= or filenames=")
+    
+    # Validate inputs for security
+    _validate_repo_id(repo_id)
     for f in to_download:
-        if not f.endswith(".gguf"):
-            raise HTTPException(status_code=400, detail="Only .gguf files allowed")
+        _validate_filename(f)
+        
     config = get_config()
     models_dir = Path(config["models_dir"])
     models_dir.mkdir(parents=True, exist_ok=True)
@@ -181,21 +193,17 @@ async def api_download(
 
     def run_download():
         try:
-            env_before = os.environ.get("HF_HOME")
-            os.environ["HF_HOME"] = str(models_dir)
-            try:
-                first_path = None
-                for fn in to_download:
-                    logger.info("Downloading %s / %s …", repo_id, fn)
-                    path = hf_service.download_model(repo_id, fn, models_dir)
-                    logger.info("Downloaded %s / %s → %s", repo_id, fn, path)
-                    if first_path is None:
-                        first_path = path
-            finally:
-                if env_before is None:
-                    os.environ.pop("HF_HOME", None)
-                else:
-                    os.environ["HF_HOME"] = env_before
+            # Note: HF_HOME handling removed as it is not thread safe.
+            # hf_service.download_model now takes models_dir as local_dir explicit argument.
+            first_path = None
+            for fn in to_download:
+                logger.info("Downloading %s / %s …", repo_id, fn)
+                # Pass models_dir as the explicit cache_dir to properly organize the HF hub files
+                path = hf_service.download_model(repo_id, fn, models_dir)
+                logger.info("Downloaded %s / %s → %s", repo_id, fn, path)
+                if first_path is None:
+                    first_path = path
+            
             _download_jobs[job_id]["path"] = str(first_path)
             _download_jobs[job_id]["status"] = "completed"
             model_card = hf_service.get_model_card_content(repo_id)

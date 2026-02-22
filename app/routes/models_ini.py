@@ -1,6 +1,7 @@
 """My Models: list and edit models.ini sections."""
 
 import logging
+from pathlib import Path
 
 from fastapi import APIRouter, Request, Form, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -21,16 +22,56 @@ def _ini_path():
 
 @router.get("", response_class=HTMLResponse)
 async def my_models_page(request: Request):
-    """List models defined in models.ini."""
+    """List models defined in models.ini and dynamically scan for unconfigured .gguf files."""
     logger.debug("GET /models")
     config = get_config()
     path = _ini_path()
     sections = ini_manager.list_sections(path)
     logger.debug("GET /models: %d sections", len(sections))
+
+    models_dir = Path(config["models_dir"])
+    configured_paths = set()
+    for s in sections:
+        if "LLAMA_ARG_MODEL" in s["params"]:
+            # Normalize to resolve symlinks
+            resolved = Path(s["params"]["LLAMA_ARG_MODEL"]).resolve()
+            configured_paths.add(str(resolved))
+
+    unconfigured_files = []
+    if models_dir.exists():
+        for gf in models_dir.rglob("*.gguf"):
+            rp = str(gf.resolve())
+            if rp not in configured_paths:
+                unconfigured_files.append({
+                    "name": gf.name,
+                    "path": rp,
+                })
+    unconfigured_files.sort(key=lambda x: x["name"])
+
     return templates.TemplateResponse(
         "my_models.html",
-        {"request": request, "sections": sections, "config": config},
+        {
+            "request": request,
+            "sections": sections,
+            "unconfigured_files": unconfigured_files,
+            "config": config
+        },
     )
+
+
+@router.post("/add_local")
+async def add_local_model(request: Request, path: str = Form(...)):
+    """Add a local unconfigured GGUF to models.ini."""
+    logger.debug("POST /models/add_local: %s", path)
+    gguf_path = Path(path)
+    if not gguf_path.exists():
+        raise HTTPException(status_code=400, detail="File not found")
+    
+    section_name = gguf_path.name.replace(".gguf", "")
+    ini_path = _ini_path()
+    params = {"LLAMA_ARG_MODEL": str(gguf_path.resolve())}
+    ini_manager.add_or_update_section(ini_path, section_name, params, merge=True)
+    return RedirectResponse(url="/models", status_code=303)
 
 
 @router.get("/edit/{section_name}", response_class=HTMLResponse)

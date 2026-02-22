@@ -178,15 +178,36 @@
     color: var(--fg);
     cursor: pointer;
   }
-  /* Sort direction button: thicker arrow */
+  /* Sort direction button: ensure arrow is visible with proper size */
   #sort-dir-btn {
     font-size: 1rem;
     font-weight: 900;
-    padding: 1px 6px;
+    padding: 2px 8px;
     border-radius: 4px;
-    min-width: 1.6rem;
+    min-width: 3rem;
+    min-height: 1.5rem;
     text-align: center;
     line-height: 1.2;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+  }
+  #sort-dir-btn::before {
+    content: '';
+    display: inline-block;
+    width: 5px;
+    height: 10px;
+  }
+  #sort-dir-btn.asc::before {
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-bottom: 10px solid currentColor;
+  }
+  #sort-dir-btn.desc::before {
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 10px solid currentColor;
   }
   .clear-btn {
     font-size: 0.7rem;
@@ -240,7 +261,7 @@
         <option value="size">Size</option>
         <option value="capabilities">Capabilities</option>
       </select>
-      <button type="button" class="filter-btn" id="sort-dir-btn" title="Sort direction: click to toggle ascending/descending" style="padding: 2px 6px; font-size: 0.85rem;">↓</button>
+      <button type="button" class="filter-btn" id="sort-dir-btn" title="Sort descending ↓" style="padding: 2px 6px; font-size: 0.85rem;">↓</button>
       <button type="button" class="clear-btn" id="clear-filters" title="Clear all filters and reset sort">✕ Clear</button>
     </div>
     <div class="pane-body" id="search-results">
@@ -307,11 +328,16 @@
     if (sortDirBtn) {
       var sort = sortSelect ? sortSelect.value : 'downloads';
       if (sort === 'name' || sort === 'author') {
-        sortDirBtn.textContent = sortAscending ? '↑' : '↓';
-        sortDirBtn.title = sortAscending ? 'Z→A (click for A→Z)' : 'A→Z (click for Z→A)';
+        // For name and author fields, show [A > Z] / [Z > A]
+        sortDirBtn.textContent = sortAscending ? '[A > Z]' : '[Z > A]';
+        sortDirBtn.title = sortAscending ? 'Sort ascending ↑' : 'Sort descending ↓';
+        sortDirBtn.classList.remove('asc', 'desc');
+        sortDirBtn.classList.add(sortAscending ? 'asc' : 'desc');
       } else {
         sortDirBtn.textContent = sortAscending ? '↑' : '↓';
-        sortDirBtn.title = 'Sort direction: ' + (sortAscending ? 'ascending (click for descending)' : 'descending (click for ascending)');
+        sortDirBtn.title = sortAscending ? 'Sort ascending ↑' : 'Sort descending ↓';
+        sortDirBtn.classList.remove('asc', 'desc');
+        sortDirBtn.classList.add(sortAscending ? 'asc' : 'desc');
       }
     }
   }
@@ -419,16 +445,16 @@
           var desc = (m.short_desc || '').trim();
           if (desc.length > 100) desc = desc.slice(0, 97) + '…';
           var descHtml = desc ? '<div class="model-desc">' + escapeHtml(desc) + '</div>' : '';
-          // Tag badges (mandatory + core only)
+          // Tag badges (mandatory + core only - no optional)
           var tagsHtml = '';
-          var allTags = (m.tags_mandatory || []).concat(m.tags_core || []).concat(m.tags_optional || []);
-          if (!allTags.length) allTags = m.tags || [];
-          if (allTags.length) {
+          var coreTags = (m.tags_mandatory || []).concat(m.tags_core || []);
+          if (!coreTags.length) coreTags = m.tags || [];
+          if (coreTags.length) {
             tagsHtml = '<div class="model-tags">';
-            allTags.forEach(function(tag, idx) {
+            coreTags.forEach(function(tag, idx) {
               var cls = 'model-tag';
               if (idx < (m.tags_mandatory || []).length) cls += ' tag-mandatory';
-              else if (idx < (m.tags_mandatory || []).length + (m.tags_core || []).length) cls += ' tag-core';
+              else cls += ' tag-core';
               tagsHtml += '<span class="' + cls + '" data-tag="' + escapeHtml(tag) + '">' + escapeHtml(tag) + '</span>';
             });
             tagsHtml += '</div>';
@@ -474,8 +500,7 @@
         var paramBadge = (data.param_count || '')
           ? '<span class="param-badge">' + escapeHtml(data.param_count) + '</span>'
           : '';
-        // Capabilities from card info (vision/tools/thinking at top level)
-        var capIcons = capIcon('vision', !!data.vision) + capIcon('tools', !!data.tools) + capIcon('thinking', !!data.thinking);
+        // Capabilities from card info (vision/tools/thinking at top level) - removed from description pane
         var hfLink = '<a href="https://huggingface.co/' + escapeHtml(repoId) + '" target="_blank" rel="noopener" style="font-size:0.82rem;">View on Hugging Face ↗</a>';
         // Meta line: author, license
         var metaParts = [];
@@ -493,6 +518,10 @@
           { tags: data.tags_core || [], cls: 'tag-core' },
           { tags: data.tags_optional || [], cls: 'tag-optional' },
         ];
+        // Fallback: if no classified tags, try generic tags array
+        if (!allTagGroups.some(function(g) { return g.tags.length > 0; }) && data.tags) {
+          allTagGroups = [{ tags: data.tags || [], cls: 'tag-optional' }];
+        }
         var hasAnyTag = allTagGroups.some(function(g) { return g.tags.length > 0; });
         if (hasAnyTag) {
           tagsHtml = '<div class="model-tags-header">';
@@ -506,7 +535,7 @@
         var header = '<div class="model-header">'
           + '<div class="model-header-row">'
           + '<h2>' + escapeHtml(displayTitle) + '</h2>'
-          + '<div class="model-header-right">' + (paramBadge || '') + capIcons + hfLink + '</div>'
+          + '<div class="model-header-right">' + (paramBadge || '') + hfLink + '</div>'
           + '</div>'
           + metaLine
           + descLine

@@ -718,32 +718,19 @@ def download_model(
     local_dir_override: Path | str | None = None,
 ) -> Path:
     """
-    Download a GGUF file into the models directory.
-    If local_dir_override is set, download there; else use HF_HOME so file lands under models_dir/hub/.
+    Download a GGUF file into the models directory safely preserving the HF Hub cache layout.
     Returns path to the downloaded file.
     """
     models_dir = Path(models_dir)
     models_dir.mkdir(parents=True, exist_ok=True)
-    if local_dir_override is not None:
-        local_dir = Path(local_dir_override)
-        local_dir.mkdir(parents=True, exist_ok=True)
-        path = _with_retry(
-            hf_hub_download,
-            repo_id=repo_id,
-            filename=filename,
-            local_dir=local_dir,
-            local_dir_use_symlinks=False,
-        )
-        return Path(path)
-    # Use HF_HOME so cache goes under models_dir.
-    # HF_HOME must be set in the calling process environment before calling hf_hub_download;
-    # the caller (api.py run_download) sets os.environ["HF_HOME"] before calling this function.
+    
+    # We use cache_dir=models_dir so HF properly tracks and chunks files safely
+    # This places models in models_dir/models--<repo_name>/snapshots/...
+    # local_dir strips directory structures which we want to explicitly avoid.
     path = _with_retry(
         hf_hub_download,
         repo_id=repo_id,
         filename=filename,
-        local_dir=None,
-        token=None,
+        cache_dir=models_dir,
     )
-    # hf_hub_download with HF_HOME uses cache under HF_HOME/hub/; path returned is the resolved path
     return Path(path)
