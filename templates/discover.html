@@ -486,7 +486,9 @@
         searchResults.innerHTML = '<p class="muted" style="padding: 0.75rem;">Error: ' + e.message + '</p>';
       });
   }
+  var currentRepoId = null;
   function selectModel(repoId) {
+    currentRepoId = repoId;
     searchResults.querySelectorAll('.model-result').forEach(function(el) {
       el.classList.toggle('selected', el.dataset.repo === repoId);
     });
@@ -563,7 +565,7 @@
               ? '<span class="quant-size">' + escapeHtml(entry.total_size_display) + '</span>'
               : '';
               
-            return fetch('/api/models/check?repo_id=' + encodeURIComponent(data.repo_id) + '&filename=' + encodeURIComponent(allFiles[0]))
+            return fetch('/api/check?repo_id=' + encodeURIComponent(data.repo_id) + '&filename=' + encodeURIComponent(allFiles[0]))
               .then(r => r.json())
               .then(checkData => {
                 var btnStyle = checkData.downloaded ? 'font-style: italic;' : 'font-weight: bold;';
@@ -586,7 +588,7 @@
             var label = stripQuantization(f);
             if (!label) label = f.replace(/\\.gguf$/i, '').split('-').pop() || f;
             
-            return fetch('/api/models/check?repo_id=' + encodeURIComponent(data.repo_id) + '&filename=' + encodeURIComponent(f))
+            return fetch('/api/check?repo_id=' + encodeURIComponent(data.repo_id) + '&filename=' + encodeURIComponent(f))
               .then(r => r.json())
               .then(checkData => {
                 var btnStyle = checkData.downloaded ? 'font-style: italic;' : 'font-weight: bold;';
@@ -624,6 +626,7 @@
         renderBottom();
       });
   }
+  window.cancelJob = cancelJob;
 
   function startDownload(repoId, filenamesStr) {
     var filenames = (filenamesStr || '').split(',').map(function(s) { return s.trim(); }).filter(Boolean);
@@ -631,7 +634,7 @@
     var firstFile = filenames[0];
     
     // Safety check just in time, in case button state wasn't updated or was bypassed
-    fetch('/api/models/check?repo_id=' + encodeURIComponent(repoId) + '&filename=' + encodeURIComponent(firstFile))
+    fetch('/api/check?repo_id=' + encodeURIComponent(repoId) + '&filename=' + encodeURIComponent(firstFile))
       .then(r => r.json())
       .then(checkData => {
         if (checkData.downloaded) {
@@ -664,7 +667,11 @@
       .then(function(r) { return r.json(); })
       .then(function(s) {
         var entry = downloadEntries.find(function(e) { return e.jobId === jobId; });
+        var justCompleted = false;
         if (entry) {
+          if (entry.status !== 'completed' && entry.status !== 'cancelled' && entry.status !== 'failed' && s.status === 'completed') {
+            justCompleted = true;
+          }
           entry.status = s.status;
           entry.path = s.path;
           entry.error = s.error;
@@ -675,7 +682,13 @@
           entry.totalBytes = s.total_bytes || 0;
         }
         renderBottom();
-        if (s.status === 'running') setTimeout(function() { pollJob(jobId); }, 500);
+        if (s.status === 'running' || s.status === 'started') {
+          setTimeout(function() { pollJob(jobId); }, 500);
+        } else if (s.status === 'completed' && justCompleted) {
+          if (currentRepoId) {
+            selectModel(currentRepoId);
+          }
+        }
       });
   }
   function appendBottom(text, isError) {
