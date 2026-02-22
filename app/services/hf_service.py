@@ -664,6 +664,18 @@ def get_model_card_info(repo_id: str) -> dict[str, Any]:
     except Exception:
         pass
 
+    # Attempt to use HfApi to fetch complete tags
+    try:
+        api = _get_api()
+        info = _with_retry(api.model_info, repo_id)
+        if hasattr(info, "tags") and info.tags:
+            # Add missing tags not gathered in ModelCard
+            for t in info.tags:
+                if t not in card_tags:
+                    card_tags.append(str(t))
+    except Exception as e:
+        logger.warning("Could not fetch full tags via model_info for %s: %s", repo_id, e)
+
     # Classify tags
     classified = _classify_tags(card_tags)
     # If no license from card metadata, try tags

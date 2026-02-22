@@ -139,6 +139,7 @@ async def api_model_detail(repo_id: str):
         "tags_mandatory": card_info.get("tags_mandatory", []),
         "tags_core": card_info.get("tags_core", []),
         "tags_optional": card_info.get("tags_optional", []),
+        "tags": card_info.get("tags_mandatory", []) + card_info.get("tags_core", []) + card_info.get("tags_optional", []),
         "vision": card_info.get("vision", False),
         "tools": card_info.get("tools", False),
         "thinking": card_info.get("thinking", False),
@@ -250,7 +251,6 @@ async def api_list_models():
     sections = ini_manager.list_sections(path)
     return {"models": sections}
 
-
 @router.get("/models/{section_name}")
 async def api_get_model(section_name: str):
     """Get one model section."""
@@ -261,6 +261,7 @@ async def api_get_model(section_name: str):
         raise HTTPException(status_code=404, detail="Model not found")
     return {"name": section_name, "params": params}
 
+
 @router.post("/download/cancel/{job_id:path}")
 async def api_download_cancel(job_id: str):
     """Cancel a running download job."""
@@ -270,7 +271,7 @@ async def api_download_cancel(job_id: str):
         _download_jobs[job_id]["status"] = "cancelled"
     return {"status": "cancelling"}
 
-@router.get("/models/check")
+@router.get("/check")
 async def api_models_check(repo_id: str, filename: str):
     """Check if a specific model quantization is already downloaded."""
     config = get_config()

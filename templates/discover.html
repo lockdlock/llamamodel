@@ -447,13 +447,14 @@
           var descHtml = desc ? '<div class="model-desc">' + escapeHtml(desc) + '</div>' : '';
           // Tag badges (mandatory + core only - no optional)
           var tagsHtml = '';
-          var coreTags = (m.tags_mandatory || []).concat(m.tags_core || []);
-          if (!coreTags.length) coreTags = m.tags || [];
+          var m_tags_mandatory = m.tags_mandatory || [];
+          var m_tags_core = m.tags_core || [];
+          var coreTags = m_tags_mandatory.concat(m_tags_core);
           if (coreTags.length) {
             tagsHtml = '<div class="model-tags">';
             coreTags.forEach(function(tag, idx) {
               var cls = 'model-tag';
-              if (idx < (m.tags_mandatory || []).length) cls += ' tag-mandatory';
+              if (idx < m_tags_mandatory.length) cls += ' tag-mandatory';
               else cls += ' tag-core';
               tagsHtml += '<span class="' + cls + '" data-tag="' + escapeHtml(tag) + '">' + escapeHtml(tag) + '</span>';
             });
@@ -520,10 +521,22 @@
           { tags: data.tags_core || [], cls: 'tag-core' },
           { tags: data.tags_optional || [], cls: 'tag-optional' },
         ];
-        // Fallback: if no classified tags, try generic tags array
-        if (!allTagGroups.some(function(g) { return g.tags.length > 0; }) && data.tags) {
-          allTagGroups = [{ tags: data.tags || [], cls: 'tag-optional' }];
+        // Fallback or addition: if there are other tags, we can just ensure they're all displayed
+        var classifiedTags = new Set();
+        allTagGroups.forEach(function(g) {
+          g.tags.forEach(function(tag) { classifiedTags.add(tag); });
+        });
+        
+        var otherTags = [];
+        if (data.tags) {
+          data.tags.forEach(function(tag) {
+            if (!classifiedTags.has(tag)) otherTags.push(tag);
+          });
         }
+        if (otherTags.length > 0) {
+          allTagGroups.push({ tags: otherTags, cls: 'tag-optional' });
+        }
+        
         var hasAnyTag = allTagGroups.some(function(g) { return g.tags.length > 0; });
         if (hasAnyTag) {
           tagsHtml = '<div class="model-tags-header">';
