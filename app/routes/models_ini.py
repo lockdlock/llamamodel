@@ -30,21 +30,22 @@ async def my_models_page(request: Request):
     
     # Check if there are top level generic parameters
     ini_parser = ini_manager.read_ini(path)
-    # The read_ini parses things outside sections into '__top__' dummy section if applicable, 
-    # but the way we save it, they might go into a custom section. Let's look for top-level keys.
-    # configparser supports a DEFAULT section, which we can extract:
-    general_params = dict(ini_parser.defaults())
-    # we can also add __top__ if it was preserved
-    if ini_parser.has_section("__top__"):
-         general_params.update(dict(ini_parser["__top__"]))
+    # The general parameters should be under the [*] section explicitly now
+    general_params = {}
+    if ini_parser.has_section("*"):
+         general_params = dict(ini_parser["*"])
     
-    # We remove LLAMA_CONFIG_VERSION if present because it's managed internally
+    # We remove old logic keys if present because they're managed internally
     if "LLAMA_CONFIG_VERSION" in general_params:
          del general_params["LLAMA_CONFIG_VERSION"]
+    if "version" in general_params:
+         del general_params["version"]
          
     sections = ini_manager.list_sections(path)
-    logger.debug("GET /models: %d sections", len(sections))
-
+    
+    # Do not include '*' in the general sections list since it powers General Parameters explicitly
+    sections = [s for s in sections if s["name"] != "*"]
+    
     models_dir = Path(config["models_dir"])
     configured_paths = set()
     
@@ -143,9 +144,13 @@ async def edit_model_page(request: Request, section_name: str):
     if section_name == "GENERAL_PARAMS":
         # special case to edit top level config
         ini_parser = ini_manager.read_ini(path)
-        params = dict(ini_parser.defaults())
+        params = {}
+        if ini_parser.has_section("*"):
+             params = dict(ini_parser["*"])
         if "LLAMA_CONFIG_VERSION" in params:
              del params["LLAMA_CONFIG_VERSION"]
+        if "version" in params:
+             del params["version"]
     else:
         params = ini_manager.get_section(path, section_name)
         if params is None:
@@ -165,29 +170,30 @@ async def save_model(section_name: str, request: Request, inline: int = 0):
     path = _ini_path()
     form = await request.form()
     params = {}
+    param_descriptions = {}
     for k, v in form.items():
         if k.startswith("param_") and v is not None:
             arg_key = k[6:].strip()
             if arg_key:
                 params[arg_key] = str(v).strip()
+                # Try to find corresponding description if it was submitted
+                desc_key = f"desc_{arg_key}"
+                if desc_key in form:
+                    param_descriptions[arg_key] = form[desc_key]
     new_key = (form.get("new_param_key") or "").strip()
     new_val = (form.get("new_param_value") or "").strip()
     if new_key:
         params[new_key] = new_val
         
     if section_name == "GENERAL_PARAMS":
-        # write to DEFAULT config of configparser by hacking into python API
-        from configparser import ConfigParser
-        ini_parser = ini_manager.read_ini(path)
-        # remove all old defaults that don't match, except LLAMA_CONFIG_VERSION
-        current_defaults = dict(ini_parser.defaults())
-        for k in current_defaults:
-            if k != "LLAMA_CONFIG_VERSION":
-                del ini_parser.defaults()[k]
+        # Write general configs cleanly exclusively to the [*] section standard
         
-        for k, v in params.items():
-            ini_parser.defaults()[k] = v
-        ini_manager.write_ini(path, ini_parser)
+        # Build parameter descriptions
+        for k in params.keys():
+            if k not in param_descriptions:
+                 param_descriptions[k] = "General parameter" 
+             
+        ini_manager.set_section(path, "*", params, param_descriptions)
         logger.info("POST /models/edit/%s: saved general config %d params", section_name, len(params))
         
         # Determine if this was an inline save or an edit page save
@@ -198,7 +204,11 @@ async def save_model(section_name: str, request: Request, inline: int = 0):
         return RedirectResponse(url="/models", status_code=303)
 
     # Standard model update
-    ini_manager.set_section(path, section_name, params)
+    for k in params.keys():
+        if k not in param_descriptions:
+             param_descriptions[k] = "Model-specific parameter"
+         
+    ini_manager.set_section(path, section_name, params, param_descriptions)
     logger.info("POST /models/edit/%s: saved %d params", section_name, len(params))
     
     # Check where the request came from so we redirect cleanly

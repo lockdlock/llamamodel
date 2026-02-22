@@ -53,17 +53,39 @@ def read_ini(ini_path: Path) -> ConfigParser:
     return parser
 
 
-def write_ini(ini_path: Path, parser: ConfigParser) -> None:
-    """Write models.ini with file lock. Writes LLAMA_CONFIG_VERSION at top then model sections."""
+def write_ini(ini_path: Path, parser: ConfigParser, param_descriptions: dict[str, str] = None) -> None:
+    """Write models.ini with file lock. Writes version at top then model sections. Adds descriptions."""
     _ensure_models_dir(ini_path)
     sections = [s for s in parser.sections() if s != "DEFAULT"]
+    
+    # Optional dictionary to map config keys to their descriptions
+    if param_descriptions is None:
+        param_descriptions = {}
+        
     with open(ini_path, "w") as f:
         _lock_file(f, exclusive=True)
         try:
-            f.write(f"LLAMA_CONFIG_VERSION = {LLAMA_CONFIG_VERSION}\n\n")
+            f.write(f"version = {LLAMA_CONFIG_VERSION}\n\n")
+            
+            # Write general parameters first explicitly if present
+            if "*" in sections:
+                f.write("[*]\n")
+                for k, v in parser["*"].items():
+                    desc = param_descriptions.get(k)
+                    if desc:
+                        f.write(f"; {desc}\n")
+                    f.write(f"{k} = {v}\n")
+                f.write("\n")
+                
+            # Write all other sections
             for section in sections:
+                if section == "*":
+                    continue
                 f.write(f"[{section}]\n")
                 for k, v in parser[section].items():
+                    desc = param_descriptions.get(k)
+                    if desc:
+                        f.write(f"; {desc}\n")
                     f.write(f"{k} = {v}\n")
                 f.write("\n")
         finally:
@@ -94,7 +116,7 @@ def get_section(ini_path: Path, section_name: str) -> dict[str, str] | None:
     return dict(parser[section_name])
 
 
-def set_section(ini_path: Path, section_name: str, params: dict[str, str]) -> None:
+def set_section(ini_path: Path, section_name: str, params: dict[str, str], param_descriptions: dict[str, str] = None) -> None:
     """Set or replace one section. Keys should be LLAMA_ARG_* style."""
     parser = read_ini(ini_path)
     if parser.has_section(section_name):
@@ -102,7 +124,7 @@ def set_section(ini_path: Path, section_name: str, params: dict[str, str]) -> No
     parser.add_section(section_name)
     for k, v in params.items():
         parser.set(section_name, k, str(v))
-    write_ini(ini_path, parser)
+    write_ini(ini_path, parser, param_descriptions)
     logger.info("set_section: wrote section '%s' (%d keys) to %s", section_name, len(params), ini_path)
 
 
@@ -112,6 +134,7 @@ def add_or_update_section(
     params: dict[str, str],
     *,
     merge: bool = True,
+    param_descriptions: dict[str, str] = None,
 ) -> None:
     """Add or update a section. If merge=True, existing keys are preserved if not in params."""
     parser = read_ini(ini_path)
@@ -126,7 +149,7 @@ def add_or_update_section(
     parser.add_section(section_name)
     for k, v in params.items():
         parser.set(section_name, k, str(v))
-    write_ini(ini_path, parser)
+    write_ini(ini_path, parser, param_descriptions)
     action = "updated" if existed else "added"
     logger.info(
         "add_or_update_section: %s section '%s' (%d keys, merge=%s) in %s",

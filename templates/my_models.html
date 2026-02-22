@@ -303,6 +303,7 @@
                     var paramVal = selectedId === paramText ? "" : ""; // For preset default values if we decide to add them later, default to empty
                     
                     var $activeDetailPane = $('.model-details.active');
+                    
                     if ($activeDetailPane.length === 0 || $activeDetailPane.attr('id') === 'empty-state') {
                         // Nothing selected
                         alert("Please select a model from the list first.");
@@ -311,34 +312,58 @@
                     }
                     
                     var $form = $activeDetailPane.find('form');
-                    var $ul = $form.find('ul');
-                    
+                var $ul = $form.find('ul');
+                
                 // Formulate the backend variable name
                 // If it's the duplicate ID we handle the display cleanly for both
                 var paramKeyStr = paramText;
                 
+                var desc = $(e.params.data.element).data('desc') || e.params.data.desc || '';
+                
+                // If appending to GENERAL_PARAMS, the input logic does not strictly need LLAMA_ARG formatting per the earlier implementations,
+                // but to match our models_ini logic properly, we actually should wrap with LLAMA_ARG_ to match llama.cpp standard regardless. Wait:
+                // Actually the model saving form expects `param_<name>` regardless of section.
+                // We must use uppercase for compatibility!
+                if ($activeDetailPane.attr('id') !== 'details-general') {
+                     // For models: uppercase LLAMA_ARG prefix
+                     // Wait, in previous step the logic was strictly requested to use the raw argument names without LLAMA_ARG_ !
+                     // But models.ini logic implies they generally expect "LLAMA_ARG_" somewhere? 
+                     // Wait, the prompt specifically said "...NOT the environment variables which are in uppercase" - so we definitely want the raw argument name.
+                     // The previous prompt specifically requested: "The parameter name is the one in the "Argument" column, just removing any trailing dashes, in lowercase, and it is the one that has to be added to the parameters list"
+                }
+
                 // Check if already in the list
                 if ($form.find('input[name="param_' + paramKeyStr + '"]').length > 0) {
                     alert('Parameter ' + paramKeyStr + ' is already configured for this item.');
-                        $(this).val(null).trigger('change');
-                        return;
-                    }
-                    
-                    // Add new row element programmatically
-                    var newLi = `
-                        <li style="margin-bottom: 0.45rem; display: flex; align-items: center;">
-                            <code style="color: #7dcfff; background: rgba(125, 207, 255, 0.1); width: 225px; flex-shrink: 0; padding: 0.27rem 0.45rem; margin-right: 0.45rem; font-size: 0.81rem;" title="${paramText}">${paramKeyStr}</code>
-                            <span style="color: var(--fg); flex-grow: 1;">
-                                <input type="text" name="param_${paramKeyStr}" value="${paramVal}" class="param-input" style="width: 100%; border: 1px solid var(--accent); background: var(--bg); color: var(--fg); padding: 0.18rem 0.45rem; border-radius: 3px; font-size: 0.855rem;" placeholder="Enter value for ${paramText}..." autofocus>
-                            </span>
-                            <button type="button" class="btn btn-secondary" style="margin-left: 0.45rem; padding: 0.18rem 0.45rem; background: transparent; color: #f7768e; border: 1px solid rgba(247, 118, 142, 0.4); font-size: 0.765rem;" onclick="removeParam(this)">✕</button>
-                        </li>
-                    `;
-                    
-                    $ul.append(newLi);
-                    
-                    // Trigger save buttons appearance automatically
-                    $form.find('.param-save-btn').show();
+                    $(this).val(null).trigger('change');
+                    return;
+                }
+                
+                // Add new row element programmatically
+                var newLi = `
+                    <li style="margin-bottom: 0.45rem; display: flex; align-items: center;">
+                        <code style="color: #7dcfff; background: rgba(125, 207, 255, 0.1); width: 225px; flex-shrink: 0; padding: 0.27rem 0.45rem; margin-right: 0.45rem; font-size: 0.81rem;" title="${paramText}">${paramKeyStr}</code>
+                        <span style="color: var(--fg); flex-grow: 1;">
+                            <input type="text" name="param_${paramKeyStr}" value="${paramVal}" class="param-input" style="width: 100%; border: 1px solid var(--accent); background: var(--bg); color: var(--fg); padding: 0.18rem 0.45rem; border-radius: 3px; font-size: 0.855rem;" placeholder="Enter value for ${paramText}..." autofocus>
+                        </span>
+                        <input type="hidden" name="desc_${paramKeyStr}" value="${desc.replace(/"/g, '&quot;')}">
+                        <button type="button" class="btn btn-secondary" style="margin-left: 0.45rem; padding: 0.18rem 0.45rem; background: transparent; color: #f7768e; border: 1px solid rgba(247, 118, 142, 0.4); font-size: 0.765rem;" onclick="removeParam(this)">✕</button>
+                    </li>
+                `;
+                
+                // Ensure there's a UL to append to (General might be empty)
+                if ($ul.length === 0) {
+                   $form.prepend('<ul class="muted" style="margin: 0; padding-left: 0; list-style-type: none; font-size: 0.855rem;"></ul>');
+                   $ul = $form.find('ul');
+                }
+                
+                $ul.append(newLi);
+                
+                // Hide empty message if there was one
+                $form.find('.empty-params-msg').hide();
+                
+                // Trigger save buttons appearance automatically
+                $form.find('.param-save-btn').show();
                     $form.find('.param-cancel-btn').show();
                     
                     // Reset select2 and focus on the new input
@@ -494,14 +519,16 @@
           
           <div class="card" style="background: rgba(36, 40, 59, 0.5);">
               <h3 style="margin-top: 0; font-size: 1.1rem; color: var(--accent);">About Global Configuration</h3>
-              <p class="muted" style="font-size: 0.9rem; margin-bottom: 0;">These parameters live at the top of <code>models.ini</code> (in the <code>[DEFAULT]</code> section) and will be applied systematically across all models loaded on this server unless overridden specifically.</p>
+              <p class="muted" style="font-size: 0.9rem; margin-bottom: 0;">These parameters live at the top of <code>models.ini</code> (in the <code>[*]</code> section) and will be applied systematically across all models loaded on this server unless overridden specifically.</p>
           </div>
           
           <h3 style="margin-top: 2rem;">Configured Global Parameters</h3>
-          {% if general_params %}
+          
+          <!-- Ensure there is always a form block even if dictionary is momentarily empty -->
           <div class="card">
-              <form action="/models/edit/GENERAL_PARAMS" method="POST">
+              <form action="/models/edit/GENERAL_PARAMS?inline=1" method="POST">
                   <ul class="muted" style="margin: 0; padding-left: 0; list-style-type: none; font-size: 0.855rem;">
+                    {% if general_params %}
                     {% for k, v in general_params.items() %}
                     <li style="margin-bottom: 0.45rem; display: flex; align-items: center;">
                         <code style="color: #7dcfff; background: rgba(125, 207, 255, 0.1); width: 225px; flex-shrink: 0; padding: 0.27rem 0.45rem; margin-right: 0.45rem; font-size: 0.81rem;">{{ k }}</code>
@@ -511,6 +538,10 @@
                         <button type="button" class="btn btn-secondary" style="margin-left: 0.45rem; padding: 0.18rem 0.45rem; background: transparent; color: #f7768e; border: 1px solid rgba(247, 118, 142, 0.4); font-size: 0.765rem;" onclick="removeParam(this)">✕</button>
                     </li>
                     {% endfor %}
+                    {% else %}
+                    <!-- Render empty UL to be appended properly by JS -->
+                    <p class="muted empty-params-msg">No global parameters set. The defaults defined by llama.cpp will be used. Search above to add explicit overrides.</p>
+                    {% endif %}
                   </ul>
                   <div style="margin-top: 0.9rem; text-align: right;">
                       <button type="submit" class="btn btn-primary param-save-btn" style="display: none; padding: 0.36rem 0.9rem; font-size: 0.9rem;">Save Changes</button>
@@ -518,9 +549,6 @@
                   </div>
               </form>
           </div>
-          {% else %}
-          <p class="muted">No global parameters set. The defaults defined by llama.cpp will be used.</p>
-          {% endif %}
       </div>
       
       {% for s in sections %}
