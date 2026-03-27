@@ -42,19 +42,6 @@ async def my_models_page(request: Request):
          del general_params["version"]
          
     sections = ini_manager.list_sections(path)
-    # --- FIX: ensure list_sections() always returns a clean list of dicts ---
-    raw_sections = sections
-
-    if isinstance(raw_sections, dict):
-        fixed_sections = []
-        for name, params in raw_sections.items():
-            fixed_sections.append({
-                "name": name,
-                "params": params
-            })
-        sections = fixed_sections
-    else:
-        sections = raw_sections
         
     # Do not include '*' in the general sections list since it powers General Parameters explicitly
     sections = [s for s in sections if s["name"] != "*"]
