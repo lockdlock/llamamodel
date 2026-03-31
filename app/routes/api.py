@@ -45,7 +45,7 @@ def _sanitize_section_name(repo_id: str, filename: str) -> str:
     # Assuming repo_id is "author/repo"
     author = repo_id.split("/")[0] if "/" in repo_id else "unknown"
         
-    return f"{author}/{card_name}:{quant}"
+    return f"{author}/{card_name}:{quant}".lower()
 
 
 def _validate_repo_id(repo_id: str) -> None:
