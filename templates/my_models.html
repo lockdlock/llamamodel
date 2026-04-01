@@ -119,88 +119,79 @@
     // Dictionary of allowed params from llama.cpp docs (Common, Sample, Server-specific)
     // Only includes options with >1 character name, minus dashes. "Explanation" column used for descriptions
     const availableParams = [
-        // --- Model ---
-        { id: "model", text: "model", desc: "path to GGUF model file" },
-        { id: "model-url", text: "model-url", desc: "URL to download model" },
-        { id: "alias", text: "alias", desc: "alias name for model" },
+        // --- Core ---
+        { id: "model", text: "model", desc: "🔥string: path to GGUF model file (required)" },
+        { id: "ctx-size", text: "ctx-size", desc: "🔥⚡int: context size in tokens (e.g. 4096, 8192)" },
+        { id: "n-predict", text: "n-predict", desc: "⚡int: max tokens to generate (-1 = unlimited)" },
+        { id: "seed", text: "seed", desc: "int: RNG seed (-1 = random)" },
 
-        // --- Context / Core ---
-        { id: "ctx-size", text: "ctx-size", desc: "context size (tokens)" },
-        { id: "n-predict", text: "n-predict", desc: "max tokens to generate (-1 = unlimited)" },
-        { id: "seed", text: "seed", desc: "RNG seed (-1 = random)" },
+        // --- Batch ---
+        { id: "batch-size", text: "batch-size", desc: "int: logical batch size (default: 2048)" },
+        { id: "ubatch-size", text: "ubatch-size", desc: "int: physical batch size (default: 512)" },
 
-        // --- Batching / Threads ---
-        { id: "batch-size", text: "batch-size", desc: "logical batch size" },
-        { id: "ubatch-size", text: "ubatch-size", desc: "physical batch size" },
-        { id: "threads", text: "threads", desc: "threads for generation" },
-        { id: "threads-batch", text: "threads-batch", desc: "threads for prompt/batch processing" },
+        // --- Threads ---
+        { id: "threads", text: "threads", desc: "int: CPU threads for generation (default: auto)" },
+        { id: "threads-batch", text: "threads-batch", desc: "int: CPU threads for prompt processing" },
 
         // --- GPU ---
-        { id: "n-gpu-layers", text: "n-gpu-layers", desc: "number of layers to offload to GPU" },
-        { id: "split-mode", text: "split-mode", desc: "multi-GPU split mode (none/layer/row)" },
-        { id: "tensor-split", text: "tensor-split", desc: "fraction of model per GPU (comma-separated)" },
-        { id: "main-gpu", text: "main-gpu", desc: "main GPU index" },
+        { id: "n-gpu-layers", text: "n-gpu-layers", desc: "int|auto|all: layers offloaded to GPU (e.g. 0, 20, 999, auto)" },
+        { id: "split-mode", text: "split-mode", desc: "enum: none | layer | row (multi-GPU split mode)" },
+        { id: "tensor-split", text: "tensor-split", desc: "string: comma-separated GPU ratios (e.g. 3,1)" },
+        { id: "main-gpu", text: "main-gpu", desc: "int: index of primary GPU (default: 0)" },
 
-        // --- Inference ---
-        { id: "n-parallel", text: "n-parallel", desc: "number of parallel requests" },
-        { id: "cont-batching", text: "cont-batching", desc: "enable continuous batching" },
-        { id: "flash-attn", text: "flash-attn", desc: "enable Flash Attention" },
+        // --- Parallelism ---
+        { id: "n-parallel", text: "n-parallel", desc: "⚡int: number of parallel requests (default: 1)" },
+        { id: "cont-batching", text: "cont-batching", desc: "⚡bool: true/false (continuous batching, default: true)" },
+
+        // --- Attention ---
+        { id: "flash-attn", text: "flash-attn", desc: "enum: auto | on | off (default: auto)" },
 
         // --- KV Cache ---
-        { id: "cache-type-k", text: "cache-type-k", desc: "KV cache type (K)" },
-        { id: "cache-type-v", text: "cache-type-v", desc: "KV cache type (V)" },
+        { id: "cache-type-k", text: "cache-type-k", desc: "⚡For K: f32 | f16 | bf16 | q8_0 | q4_0 | q4_1 | q5_0 | q5_1 | iq4_nl (default: f16)" },
+        { id: "cache-type-v", text: "cache-type-v", desc: "⚡For V: f32 | f16 | bf16 | q8_0 | q4_0 | q4_1 | q5_0 | q5_1 | iq4_nl (default: f16)" },
+        { id: "kv-offload", text: "kv-offload", desc: "⚡bool: true/false (store KV cache on GPU, default: true)" },
 
-        // --- RoPE / YaRN ---
-        { id: "rope-scale", text: "rope-scale", desc: "RoPE scaling factor" },
-        { id: "rope-freq-base", text: "rope-freq-base", desc: "RoPE base frequency" },
-        { id: "rope-freq-scale", text: "rope-freq-scale", desc: "RoPE frequency scaling" },
-        { id: "yarn-orig-ctx", text: "yarn-orig-ctx", desc: "original context size (YaRN)" },
-        { id: "yarn-ext-factor", text: "yarn-ext-factor", desc: "YaRN extrapolation factor" },
-        { id: "yarn-attn-factor", text: "yarn-attn-factor", desc: "YaRN attention factor" },
-        { id: "yarn-beta-fast", text: "yarn-beta-fast", desc: "YaRN beta fast" },
-        { id: "yarn-beta-slow", text: "yarn-beta-slow", desc: "YaRN beta slow" },
+        // --- RoPE / Context scaling ---
+        { id: "rope-scale", text: "rope-scale", desc: "⚡float: RoPE scaling factor (e.g. 1.0, 2.0)" },
+        { id: "rope-freq-base", text: "rope-freq-base", desc: "⚡float: base frequency (default: 10000)" },
+        { id: "rope-freq-scale", text: "rope-freq-scale", desc: "⚡float: scaling factor (1/N)" },
+
+        // --- YaRN ---
+        { id: "yarn-orig-ctx", text: "yarn-orig-ctx", desc: "⚡int: original context size (e.g. 4096)" },
+        { id: "yarn-ext-factor", text: "yarn-ext-factor", desc: "⚡float: extrapolation mix (-1 = auto)" },
+        { id: "yarn-attn-factor", text: "yarn-attn-factor", desc: "⚡float: attention scale (-1 = auto)" },
 
         // --- Sampling ---
-        { id: "temp", text: "temp", desc: "temperature" },
-        { id: "top-k", text: "top-k", desc: "top-k sampling" },
-        { id: "top-p", text: "top-p", desc: "top-p sampling" },
-        { id: "min-p", text: "min-p", desc: "min-p sampling" },
-        { id: "tfs", text: "tfs", desc: "tail free sampling" },
-        { id: "typical", text: "typical", desc: "typical sampling" },
-        { id: "repeat-last-n", text: "repeat-last-n", desc: "repeat window" },
-        { id: "repeat-penalty", text: "repeat-penalty", desc: "repeat penalty" },
-        { id: "presence-penalty", text: "presence-penalty", desc: "presence penalty" },
-        { id: "frequency-penalty", text: "frequency-penalty", desc: "frequency penalty" },
+        { id: "temp", text: "temp", desc: "float: temperature (0.0–2.0, default: 0.8)" },
+        { id: "top-k", text: "top-k", desc: "int: top-k sampling (0 = disabled, default: 40)" },
+        { id: "top-p", text: "top-p", desc: "float: nucleus sampling (0–1, default: 0.95)" },
+        { id: "min-p", text: "min-p", desc: "float: minimum probability (default: 0.05)" },
+        { id: "tfs", text: "tfs", desc: "⚡float: tail free sampling (1.0 = disabled)" },
+        { id: "typical", text: "typical", desc: "float: typical sampling (1.0 = disabled)" },
+        { id: "repeat-penalty", text: "repeat-penalty", desc: "⚡float: penalize repeated sequences (default: 1.1)" },
 
         // --- Advanced Sampling ---
-        { id: "dry-multiplier", text: "dry-multiplier", desc: "DRY multiplier" },
-        { id: "dry-base", text: "dry-base", desc: "DRY base" },
-        { id: "dry-allowed-length", text: "dry-allowed-length", desc: "DRY allowed length" },
-        { id: "dry-penalty-last-n", text: "dry-penalty-last-n", desc: "DRY penalty window" },
-
-        { id: "mirostat", text: "mirostat", desc: "enable mirostat sampling" },
-        { id: "mirostat-lr", text: "mirostat-lr", desc: "mirostat learning rate" },
-        { id: "mirostat-ent", text: "mirostat-ent", desc: "mirostat entropy target" },
-
-        { id: "logit-bias", text: "logit-bias", desc: "token bias" },
-        { id: "grammar", text: "grammar", desc: "inline grammar constraint" },
-        { id: "grammar-file", text: "grammar-file", desc: "grammar file path" },
-        { id: "ignore-eos", text: "ignore-eos", desc: "ignore EOS token" },
+        { id: "mirostat", text: "mirostat", desc: "⚡enum: 0=off | 1=stable | 2=adaptive (recommended: 1 or 2)" },
+        { id: "mirostat-lr", text: "mirostat-lr", desc: "⚡float: learning rate (0.1–0.3 recommended)" },
+        { id: "mirostat-ent", text: "mirostat-ent", desc: "⚡float: target entropy (4–6 balanced, higher=more random)" },
 
         // --- Chat ---
         { id: "chat-template", text: "chat-template", desc: "chat template (chatml, llama3, etc.)" },
 
+        // --- Grammar ---
+        { id: "grammar", text: "grammar", desc: "string: inline grammar constraint" },
+        { id: "grammar-file", text: "grammar-file", desc: "string: path to grammar file" },
+
         // --- Server ---
-        { id: "host", text: "host", desc: "server host" },
-        { id: "port", text: "port", desc: "server port" },
-        { id: "timeout", text: "timeout", desc: "request timeout" },
-        { id: "threads-http", text: "threads-http", desc: "HTTP worker threads" },
+        { id: "host", text: "host", desc: "string: bind address (default: 127.0.0.1)" },
+        { id: "port", text: "port", desc: "int: server port (default: 8080)" },
+        { id: "timeout", text: "timeout", desc: "int: timeout seconds" },
+        { id: "threads-http", text: "threads-http", desc: "int: HTTP worker threads" },
 
-        { id: "api-key", text: "api-key", desc: "API key" },
-        { id: "api-key-file", text: "api-key-file", desc: "API key file" },
-
-        { id: "ssl-cert-file", text: "ssl-cert-file", desc: "SSL certificate" },
-        { id: "ssl-key-file", text: "ssl-key-file", desc: "SSL private key" },
+        // --- Features ---
+        { id: "embedding", text: "embedding", desc: "bool: true/false (enable embedding endpoint)" },
+        { id: "pooling", text: "pooling", desc: "enum: none | mean | cls | last" },
+        { id: "metrics", text: "metrics", desc: "bool: true=enable metrics endpoint (default: false)" },
 
         { id: "embedding", text: "embedding", desc: "enable embeddings endpoint" },
         { id: "pooling", text: "pooling", desc: "embedding pooling strategy" },
@@ -208,13 +199,13 @@
         { id: "metrics", text: "metrics", desc: "enable metrics endpoint" },
 
         // --- Memory ---
-        { id: "mlock", text: "mlock", desc: "lock model in RAM" },
-        { id: "no-mmap", text: "no-mmap", desc: "disable mmap" },
-        { id: "numa", text: "numa", desc: "NUMA optimization" },
-
+        { id: "mlock", text: "mlock", desc: "bool: true=lock model in RAM (default: false)" },
+        { id: "no-mmap", text: "no-mmap", desc: "bool: true=disable mmap (default: false)" },
+        { id: "numa", text: "numa", desc: "enum: distribute | isolate | numactl" },
+      
         // --- LoRA ---
-        { id: "lora", text: "lora", desc: "LoRA adapter path" },
-        { id: "lora-scaled", text: "lora-scaled", desc: "LoRA with scaling" }
+        { id: "lora", text: "lora", desc: "LoRA adapter path (single file, optional)" },
+        { id: "lora-scaled", text: "lora-scaled", desc: "LoRA adapter with scaling (single file, optional)" },
     ];
 
     function selectModel(modelId) {
