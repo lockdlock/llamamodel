@@ -119,104 +119,102 @@
     // Dictionary of allowed params from llama.cpp docs (Common, Sample, Server-specific)
     // Only includes options with >1 character name, minus dashes. "Explanation" column used for descriptions
     const availableParams = [
-        // Common Params
-        { id: "model", text: "model", desc: "model path" },
-        { id: "model-url", text: "model-url", desc: "model download url" },
-        { id: "alias", text: "alias", desc: "set alias for model name" },
-        { id: "ctx-size", text: "ctx-size", desc: "size of the prompt context" },
-        { id: "seed", text: "seed", desc: "RNG seed" },
-        { id: "batch-size", text: "batch-size", desc: "logical maximum batch size" },
-        { id: "ubatch-size", text: "ubatch-size", desc: "physical maximum batch size" },
-        { id: "threads", text: "threads", desc: "number of threads to use during generation" },
-        { id: "threads-batch", text: "threads-batch", desc: "number of threads to use during batch and prompt processing" },
-        { id: "threads-draft", text: "threads-draft", desc: "number of threads to use during generation" },
-        { id: "threads-batch-draft", text: "threads-batch-draft", desc: "number of threads to use during batch and prompt processing" },
-        { id: "lookup-cache-static", text: "lookup-cache-static", desc: "path to static lookup cache to use for APIR" },
-        { id: "lookup-cache-dynamic", text: "lookup-cache-dynamic", desc: "path to dynamic lookup cache to use for APIR" },
-        { id: "system-prompt-file", text: "system-prompt-file", desc: "Set a file to load a system prompt" },
-        { id: "n-predict", text: "n-predict", desc: "number of tokens to predict" },
-        { id: "n-gpu-layers", text: "n-gpu-layers", desc: "number of layers to store in VRAM" },
-        { id: "n-gpu-layers-draft", text: "n-gpu-layers-draft", desc: "number of layers to store in VRAM for the draft model" },
-        { id: "split-mode", text: "split-mode", desc: "how to split the model across multiple GPUs" },
-        { id: "tensor-split", text: "tensor-split", desc: "fraction of the model to offload to each GPU" },
-        { id: "main-gpu", text: "main-gpu", desc: "the GPU to use for the model" },
-        { id: "rpc", text: "rpc", desc: "comma separated list of RPC servers" },
-        
-        // Sampling Params
-        { id: "params-n", text: "params-n", desc: "number of parameters to offload" },
+        // --- Model ---
+        { id: "model", text: "model", desc: "path to GGUF model file" },
+        { id: "model-url", text: "model-url", desc: "URL to download model" },
+        { id: "alias", text: "alias", desc: "alias name for model" },
+
+        // --- Context / Core ---
+        { id: "ctx-size", text: "ctx-size", desc: "context size (tokens)" },
+        { id: "n-predict", text: "n-predict", desc: "max tokens to generate (-1 = unlimited)" },
+        { id: "seed", text: "seed", desc: "RNG seed (-1 = random)" },
+
+        // --- Batching / Threads ---
+        { id: "batch-size", text: "batch-size", desc: "logical batch size" },
+        { id: "ubatch-size", text: "ubatch-size", desc: "physical batch size" },
+        { id: "threads", text: "threads", desc: "threads for generation" },
+        { id: "threads-batch", text: "threads-batch", desc: "threads for prompt/batch processing" },
+
+        // --- GPU ---
+        { id: "n-gpu-layers", text: "n-gpu-layers", desc: "number of layers to offload to GPU" },
+        { id: "split-mode", text: "split-mode", desc: "multi-GPU split mode (none/layer/row)" },
+        { id: "tensor-split", text: "tensor-split", desc: "fraction of model per GPU (comma-separated)" },
+        { id: "main-gpu", text: "main-gpu", desc: "main GPU index" },
+
+        // --- Inference ---
+        { id: "n-parallel", text: "n-parallel", desc: "number of parallel requests" },
+        { id: "cont-batching", text: "cont-batching", desc: "enable continuous batching" },
+        { id: "flash-attn", text: "flash-attn", desc: "enable Flash Attention" },
+
+        // --- KV Cache ---
+        { id: "cache-type-k", text: "cache-type-k", desc: "KV cache type (K)" },
+        { id: "cache-type-v", text: "cache-type-v", desc: "KV cache type (V)" },
+
+        // --- RoPE / YaRN ---
+        { id: "rope-scale", text: "rope-scale", desc: "RoPE scaling factor" },
+        { id: "rope-freq-base", text: "rope-freq-base", desc: "RoPE base frequency" },
+        { id: "rope-freq-scale", text: "rope-freq-scale", desc: "RoPE frequency scaling" },
+        { id: "yarn-orig-ctx", text: "yarn-orig-ctx", desc: "original context size (YaRN)" },
+        { id: "yarn-ext-factor", text: "yarn-ext-factor", desc: "YaRN extrapolation factor" },
+        { id: "yarn-attn-factor", text: "yarn-attn-factor", desc: "YaRN attention factor" },
+        { id: "yarn-beta-fast", text: "yarn-beta-fast", desc: "YaRN beta fast" },
+        { id: "yarn-beta-slow", text: "yarn-beta-slow", desc: "YaRN beta slow" },
+
+        // --- Sampling ---
+        { id: "temp", text: "temp", desc: "temperature" },
         { id: "top-k", text: "top-k", desc: "top-k sampling" },
         { id: "top-p", text: "top-p", desc: "top-p sampling" },
         { id: "min-p", text: "min-p", desc: "min-p sampling" },
-        { id: "tfs", text: "tfs", desc: "tail free sampling, parameter z" },
-        { id: "typical", text: "typical", desc: "locally typical sampling, parameter p" },
-        { id: "repeat-last-n", text: "repeat-last-n", desc: "last n tokens to consider for penalize" },
-        { id: "repeat-penalty", text: "repeat-penalty", desc: "penalize repeat sequence of tokens" },
-        { id: "presence-penalty", text: "presence-penalty", desc: "repeat alpha presence penalty" },
-        { id: "frequency-penalty", text: "frequency-penalty", desc: "repeat alpha frequency penalty" },
-        { id: "dry-multiplier", text: "dry-multiplier", desc: "set DRY sampling multiplier" },
-        { id: "dry-base", text: "dry-base", desc: "set DRY sampling base value" },
-        { id: "dry-allowed-length", text: "dry-allowed-length", desc: "set allowed length for DRY sampling" },
-        { id: "dry-penalty-last-n", text: "dry-penalty-last-n", desc: "set DRY penalty for the last n tokens" },
-        { id: "dry-sequence-breaker", text: "dry-sequence-breaker", desc: "add sequence breaker for DRY sampling" },
-        { id: "dynatemp-range", text: "dynatemp-range", desc: "dynamic temperature range" },
-        { id: "dynatemp-exp", text: "dynatemp-exp", desc: "dynamic temperature exponent" },
-        { id: "mirostat", text: "mirostat", desc: "use Mirostat sampling." },
-        { id: "mirostat-lr", text: "mirostat-lr", desc: "Mirostat learning rate, parameter eta" },
-        { id: "mirostat-ent", text: "mirostat-ent", desc: "Mirostat target entropy, parameter tau" },
-        { id: "logit-bias", text: "logit-bias", desc: "modifies the likelihood of token appearing in the completion" },
-        { id: "grammar", text: "grammar", desc: "BNF-like grammar to constrain generations" },
-        { id: "grammar-file", text: "grammar-file", desc: "file to read grammar from" },
-        { id: "penalty-prompt", text: "penalty-prompt", desc: "override the prompt for penalty evaluation" },
-        { id: "ignore-eos", text: "ignore-eos", desc: "ignore end of stream token and continue generating" },
-        { id: "no-penalize-nl", text: "no-penalize-nl", desc: "do not penalize newline token" },
-        { id: "temp", text: "temp", desc: "temperature" },
-        { id: "samplers", text: "samplers", desc: "samplers that will be used for generation in the order" },
-        { id: "xtc-probability", text: "xtc-probability", desc: "xtc probability" },
-        { id: "xtc-threshold", text: "xtc-threshold", desc: "xtc threshold" },
-        
-        // Server-specific params
-        { id: "host", text: "host", desc: "ip address to listen" },
-        { id: "port", text: "port", desc: "port to listen" },
-        { id: "path", text: "path", desc: "path to serve static files from" },
-        { id: "embedding", text: "embedding", desc: "enable embedding vector output" },
-        { id: "api-key", text: "api-key", desc: "api key to use for authentication" },
-        { id: "api-key-file", text: "api-key-file", desc: "path to file containing api keys" },
-        { id: "ssl-key-file", text: "ssl-key-file", desc: "path to file a PEM-encoded SSL private key" },
-        { id: "ssl-cert-file", text: "ssl-cert-file", desc: "path to file a PEM-encoded SSL certificate" },
-        { id: "timeout", text: "timeout", desc: "server read/write timeout in seconds" },
-        { id: "threads-http", text: "threads-http", desc: "number of threads used to process HTTP requests" },
-        { id: "system-prompt-file-server", text: "system-prompt-file", desc: "Set a file to load a system prompt" },
-        { id: "metrics", text: "metrics", desc: "enable prometheus compatible metrics endpoint" },
-        { id: "strict-format", text: "strict-format", desc: "ensure strict formatting of variables" },
-        { id: "jinja", text: "jinja", desc: "enable/disable Jinja templating" },
-        { id: "mlock", text: "mlock", desc: "force system to keep model in RAM rather than swapping or compressing" },
-        { id: "no-mmap", text: "no-mmap", desc: "do not memory-map model" },
-        { id: "numa", text: "numa", desc: "attempt optimizations that help on some NUMA systems" },
-        { id: "control-vector", text: "control-vector", desc: "add a control vector" },
-        { id: "control-vector-scaled", text: "control-vector-scaled", desc: "add a control vector with user defined scaling" },
-        { id: "control-vector-layer-range", text: "control-vector-layer-range", desc: "layer range to apply the control vector(s) to" },
-        { id: "lora", text: "lora", desc: "apply LoRA adapter" },
-        { id: "lora-scaled", text: "lora-scaled", desc: "apply LoRA adapter with user defined scaling" },
-        { id: "lora-init-without-apply", text: "lora-init-without-apply", desc: "load LoRA adapters without applying them" },
-        { id: "pooling", text: "pooling", desc: "pooling type for embeddings" },
-        { id: "attention", text: "attention", desc: "attention type" },
-        { id: "grp-attn-n", text: "grp-attn-n", desc: "group-attention factor" },
-        { id: "grp-attn-w", text: "grp-attn-w", desc: "group-attention width" },
-        { id: "rope-scaling", text: "rope-scaling", desc: "RoPE frequency scaling method" },
-        { id: "rope-scale", text: "rope-scale", desc: "RoPE context scaling factor" },
-        { id: "rope-freq-base", text: "rope-freq-base", desc: "RoPE base frequency" },
-        { id: "rope-freq-scale", text: "rope-freq-scale", desc: "RoPE frequency scaling factor" },
-        { id: "yarn-orig-ctx", text: "yarn-orig-ctx", desc: "YaRN: original context size of model" },
-        { id: "yarn-ext-factor", text: "yarn-ext-factor", desc: "YaRN: extrapolation mix factor" },
-        { id: "yarn-attn-factor", text: "yarn-attn-factor", desc: "YaRN: scale sqrt(t) or attention magnitude" },
-        { id: "yarn-beta-fast", text: "yarn-beta-fast", desc: "YaRN: low dimensions scaling factor" },
-        { id: "yarn-beta-slow", text: "yarn-beta-slow", desc: "YaRN: high dimensions scaling factor" },
-        { id: "defrag-thold", text: "defrag-thold", desc: "KV cache defragmentation threshold" },
-        { id: "cont-batching", text: "cont-batching", desc: "enable continuous batching" },
-        { id: "flash-attn", text: "flash-attn", desc: "enable Flash Attention" },
-        { id: "chat-template", text: "chat-template", desc: "set chat template" },
-        { id: "slot-save-path", text: "slot-save-path", desc: "path to save slot kv cache" },
-        { id: "slot-prompt-similarity", text: "slot-prompt-similarity", desc: "how much the prompt of a request must match the prompt of a slot in order to use it" },
+        { id: "tfs", text: "tfs", desc: "tail free sampling" },
+        { id: "typical", text: "typical", desc: "typical sampling" },
+        { id: "repeat-last-n", text: "repeat-last-n", desc: "repeat window" },
+        { id: "repeat-penalty", text: "repeat-penalty", desc: "repeat penalty" },
+        { id: "presence-penalty", text: "presence-penalty", desc: "presence penalty" },
+        { id: "frequency-penalty", text: "frequency-penalty", desc: "frequency penalty" },
+
+        // --- Advanced Sampling ---
+        { id: "dry-multiplier", text: "dry-multiplier", desc: "DRY multiplier" },
+        { id: "dry-base", text: "dry-base", desc: "DRY base" },
+        { id: "dry-allowed-length", text: "dry-allowed-length", desc: "DRY allowed length" },
+        { id: "dry-penalty-last-n", text: "dry-penalty-last-n", desc: "DRY penalty window" },
+
+        { id: "mirostat", text: "mirostat", desc: "enable mirostat sampling" },
+        { id: "mirostat-lr", text: "mirostat-lr", desc: "mirostat learning rate" },
+        { id: "mirostat-ent", text: "mirostat-ent", desc: "mirostat entropy target" },
+
+        { id: "logit-bias", text: "logit-bias", desc: "token bias" },
+        { id: "grammar", text: "grammar", desc: "inline grammar constraint" },
+        { id: "grammar-file", text: "grammar-file", desc: "grammar file path" },
+        { id: "ignore-eos", text: "ignore-eos", desc: "ignore EOS token" },
+
+        // --- Chat ---
+        { id: "chat-template", text: "chat-template", desc: "chat template (chatml, llama3, etc.)" },
+
+        // --- Server ---
+        { id: "host", text: "host", desc: "server host" },
+        { id: "port", text: "port", desc: "server port" },
+        { id: "timeout", text: "timeout", desc: "request timeout" },
+        { id: "threads-http", text: "threads-http", desc: "HTTP worker threads" },
+
+        { id: "api-key", text: "api-key", desc: "API key" },
+        { id: "api-key-file", text: "api-key-file", desc: "API key file" },
+
+        { id: "ssl-cert-file", text: "ssl-cert-file", desc: "SSL certificate" },
+        { id: "ssl-key-file", text: "ssl-key-file", desc: "SSL private key" },
+
+        { id: "embedding", text: "embedding", desc: "enable embeddings endpoint" },
+        { id: "pooling", text: "pooling", desc: "embedding pooling strategy" },
+
+        { id: "metrics", text: "metrics", desc: "enable metrics endpoint" },
+
+        // --- Memory ---
+        { id: "mlock", text: "mlock", desc: "lock model in RAM" },
+        { id: "no-mmap", text: "no-mmap", desc: "disable mmap" },
+        { id: "numa", text: "numa", desc: "NUMA optimization" },
+
+        // --- LoRA ---
+        { id: "lora", text: "lora", desc: "LoRA adapter path" },
+        { id: "lora-scaled", text: "lora-scaled", desc: "LoRA with scaling" }
     ];
 
     function selectModel(modelId) {
