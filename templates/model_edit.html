@@ -57,34 +57,92 @@
 
         // Initialize with predefined values
         const params = [
-            { id: "model", text: "model", desc: "model path" },
-            { id: "model-url", text: "model-url", desc: "model download url" },
-            { id: "alias", text: "alias", desc: "set an alias for the model" },
-            { id: "c", text: "c", desc: "size of the prompt context" },
-            { id: "s", text: "s", desc: "RNG seed" },
-            { id: "b", text: "b", desc: "logical maximum batch size" },
-            { id: "ub", text: "ub", desc: "physical maximum batch size" },
-            { id: "t", text: "t", desc: "number of threads to use during generation" },
-            { id: "tb", text: "tb", desc: "number of threads to use during batch and prompt processing" },
+            { id: "model",             text: "model",             desc: "model path" },
+            { id: "model-url",         text: "model-url",         desc: "model download url" },
+            { id: "alias",             text: "alias",             desc: "set alias for model name" },
+            { id: "hf-repo",           text: "hf-repo",           desc: "Hugging Face model repository (e.g. unsloth/phi-4-GGUF:q4_k_m)" },
+            { id: "hf-file",           text: "hf-file",           desc: "Hugging Face model file (overrides quant in hf-repo)" },
+            { id: "docker-repo",       text: "docker-repo",       desc: "Docker Hub model repository (e.g. gemma3)" },
+            { id: "ctx-size",          text: "ctx-size",          desc: "size of the prompt context (alias of -c, e.g. 4096)" },
+            { id: "n-predict",         text: "n-predict",         desc: "number of tokens to predict (default: -1 = infinity)" },
+            { id: "batch-size",        text: "batch-size",        desc: "logical maximum batch size (default: 2048)" },
+            { id: "ubatch-size",       text: "ubatch-size",       desc: "physical maximum batch size (default: 512)" },
             { id: "system-prompt-file", text: "system-prompt-file", desc: "Set a file to load a system prompt" },
-            { id: "n-predict", text: "n-predict", desc: "number of tokens to predict" },
-            { id: "ngl", text: "ngl", desc: "number of layers to store in VRAM" },
-            { id: "top-k", text: "top-k", desc: "top-k sampling" },
-            { id: "top-p", text: "top-p", desc: "top-p sampling" },
-            { id: "min-p", text: "min-p", desc: "min-p sampling" },
-            { id: "xtc-probability", text: "xtc-probability", desc: "xtc probability" },
-            { id: "xtc-threshold", text: "xtc-threshold", desc: "xtc threshold" },
-            { id: "tfs", text: "tfs", desc: "tail free sampling, parameter z" },
-            { id: "typical", text: "typical", desc: "locally typical sampling, parameter p" },
-            { id: "repeat-last-n", text: "repeat-last-n", desc: "last n tokens to consider for penalize" },
-            { id: "repeat-penalty", text: "repeat-penalty", desc: "penalize repeat sequence of tokens" },
-            { id: "presence-penalty", text: "presence-penalty", desc: "repeat alpha presence penalty" },
-            { id: "frequency-penalty", text: "frequency-penalty", desc: "repeat alpha frequency penalty" },
-            { id: "dry-multiplier", text: "dry-multiplier", desc: "set DRY sampling multiplier" },
-            { id: "dry-base", text: "dry-base", desc: "set DRY sampling base value" },
-            { id: "dry-allowed-length", text: "dry-allowed-length", desc: "set allowed length for DRY sampling" },
-            { id: "dry-penalty-last-n", text: "dry-penalty-last-n", desc: "set DRY penalty for the last n tokens" }
-        ];
+            { id: "seed",              text: "seed",              desc: "RNG seed (default: -1 = random)" },
+
+             // --- GPU / Device ---
+            { id: "ngl",              text: "ngl",              desc: "number of layers to store in VRAM (short form of n-gpu-layers)" },
+            { id: "n-gpu-layers",     text: "n-gpu-layers",     desc: "layers in VRAM: number / auto / all (default: auto)" },
+            { id: "split-mode",       text: "split-mode",       desc: "multi-GPU split: none / layer / row (default: layer)" },
+            { id: "tensor-split",     text: "tensor-split",     desc: "GPU offload ratio, comma-separated (e.g. 3,1)" },
+            { id: "main-gpu",         text: "main-gpu",         desc: "main GPU index (default: 0)" },
+            { id: "device",           text: "device",           desc: "comma-separated devices for offloading (e.g. CUDA0,CUDA1)" },
+            { id: "override-tensor",  text: "override-tensor",  desc: "override tensor buffer type (e.g. blk\\..*\\.attn=CUDA0)" },
+            { id: "n-cpu-moe",        text: "n-cpu-moe",        desc: "keep first N MoE layers in CPU" },
+            { id: "cpu-moe",          text: "cpu-moe",          desc: "keep all MoE weights in CPU (FLAG: true to enable)" },
+            { id: "fit",              text: "fit",              desc: "auto-fit args to device memory: on / off (default: on)" },
+
+            // --- Inference / Context ---
+            { id: "n-parallel",       text: "n-parallel",       desc: "number of parallel slots / simultaneous requests (e.g. 4)" },
+            { id: "cont-batching",    text: "cont-batching",    desc: "continuous batching: true / false (default: true)" },
+            { id: "flash-attn",       text: "flash-attn",       desc: "Flash Attention: on / off / auto (default: auto)" },
+            { id: "swa-full",         text: "swa-full",         desc: "use full-size SWA cache: true / false (default: false)" },
+            { id: "no-context-shift", text: "no-context-shift", desc: "disable context shift (FLAG: true to enable)" },
+
+            // --- KV Cache ---
+            { id: "cache-type-k",    text: "cache-type-k",    desc: "KV cache type for K: f32 / f16 / bf16 / q8_0 / q4_0 / q4_1 / iq4_nl / q5_0 / q5_1 (default: f16)" },
+            { id: "cache-type-v",    text: "cache-type-v",    desc: "KV cache type for V: f32 / f16 / bf16 / q8_0 / q4_0 / q4_1 / iq4_nl / q5_0 / q5_1 (default: f16)" },
+            { id: "kv-offload",      text: "kv-offload",      desc: "KV cache GPU offload: true / false (default: true)" },
+            { id: "defrag-thold",    text: "defrag-thold",    desc: "KV cache defrag threshold, DEPRECATED (e.g. 0.1)" },
+
+            // --- RoPE / YaRN ---
+            { id: "rope-scale",       text: "rope-scale",       desc: "RoPE context scaling factor (e.g. 2.0)" },
+            { id: "rope-freq-base",   text: "rope-freq-base",   desc: "RoPE base frequency for NTK-aware scaling (e.g. 10000)" },
+            { id: "rope-freq-scale",  text: "rope-freq-scale",  desc: "RoPE frequency scaling factor 1/N (e.g. 0.5)" },
+            { id: "yarn-orig-ctx",    text: "yarn-orig-ctx",    desc: "YaRN: original context size of model (e.g. 4096)" },
+            { id: "yarn-ext-factor",  text: "yarn-ext-factor",  desc: "YaRN: extrapolation mix factor (0.0=full interpolation, default: -1)" },
+            { id: "yarn-attn-factor", text: "yarn-attn-factor", desc: "YaRN: attention magnitude scale (default: -1)" },
+            { id: "yarn-beta-slow",   text: "yarn-beta-slow",   desc: "YaRN: high correction dim / alpha (default: -1)" },
+            { id: "yarn-beta-fast",   text: "yarn-beta-fast",   desc: "YaRN: low correction dim / beta (default: -1)" },
+
+            // --- Sampling ---
+            { id: "top-k",              text: "top-k",              desc: "top-k sampling (default: 40, 0=disabled)" },
+            { id: "top-p",              text: "top-p",              desc: "top-p sampling (default: 0.95, 1.0=disabled)" },
+            { id: "min-p",              text: "min-p",              desc: "min-p sampling (default: 0.05, 0.0=disabled)" },
+            { id: "xtc-probability",    text: "xtc-probability",    desc: "xtc probability (default: 0.00, 0.0=disabled)" },
+            { id: "xtc-threshold",      text: "xtc-threshold",      desc: "xtc threshold (default: 0.10, 1.0=disabled)" },
+            { id: "tfs",                text: "tfs",                desc: "tail free sampling, parameter z (default: 1.0=disabled)" },
+            { id: "typical",            text: "typical",            desc: "locally typical sampling, parameter p (default: 1.0=disabled)" },
+            { id: "repeat-last-n",      text: "repeat-last-n",      desc: "last n tokens to consider for penalize (default: 64, 0=disabled)" },
+            { id: "repeat-penalty",     text: "repeat-penalty",     desc: "penalize repeat sequence of tokens (default: 1.00, 1.0=disabled)" },
+            { id: "presence-penalty",   text: "presence-penalty",   desc: "repeat alpha presence penalty (default: 0.00, 0.0=disabled)" },
+            { id: "frequency-penalty",  text: "frequency-penalty",  desc: "repeat alpha frequency penalty (default: 0.00, 0.0=disabled)" },
+            { id: "dry-multiplier",     text: "dry-multiplier",     desc: "DRY sampling multiplier (default: 0.00, 0.0=disabled)" },
+            { id: "dry-base",           text: "dry-base",           desc: "DRY sampling base value (default: 1.75)" },
+            { id: "dry-allowed-length", text: "dry-allowed-length", desc: "allowed length for DRY sampling (default: 2)" },
+            { id: "dry-penalty-last-n", text: "dry-penalty-last-n", desc: "DRY penalty for the last n tokens (default: -1=context size)" },
+            { id: "chat-template",      text: "chat-template",      desc: "chat template: chatml / llama3 / phi3 / phi4 / gemma / mistral-v1 etc." },
+
+            // --- Server / API ---
+            { id: "embeddings",        text: "embeddings",        desc: "enable embedding vector output: true / false / enabled / disabled (default: false)" },
+            { id: "pooling",           text: "pooling",           desc: "pooling type for embeddings: none / mean / cls / last / rank (default: model default)" },
+            { id: "reranking",         text: "reranking",         desc: "enable reranking endpoint: true / false / enabled / disabled (default: false)" },
+            { id: "endpoint-metrics",  text: "endpoint-metrics",  desc: "enable Prometheus metrics endpoint: true / false (default: false)" },
+
+            // --- Memory ---
+            { id: "mmap",              text: "mmap",              desc: "memory-map model: true / false (default: true)" },
+            { id: "repack",            text: "repack",            desc: "weight repacking: true / false (default: true)" },
+            { id: "numa",              text: "numa",              desc: "NUMA optimization: distribute / isolate / numactl" },
+            { id: "kv-offload",        text: "kv-offload",        desc: "KV cache GPU offload: true / false (default: true)" },
+
+            // --- Short forms (for compatibility) ---
+            { id: "c",   text: "c",   desc: "size of the prompt context (short form of ctx-size)" },
+            { id: "s",   text: "s",   desc: "RNG seed (short form of seed)" },
+            { id: "b",   text: "b",   desc: "logical maximum batch size (short form of batch-size)" },
+            { id: "ub",  text: "ub",  desc: "physical maximum batch size (short form of ubatch-size)" },
+            { id: "t",   text: "t",   desc: "number of threads to use during generation (short form of threads)" },
+            { id: "tb",  text: "tb",  desc: "number of threads to use during batch processing (short form of threads-batch)" },
+       ];
 
         var $select = $('#new_param_key_select');
         $.each(params, function(i, p) {
