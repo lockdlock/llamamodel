@@ -420,6 +420,37 @@
         // Reloading the page discards all unsubmitted form changes securely using the server's truth
         window.location.reload();
     }
+
+    function copyToClip(elementId, btn) {
+        var text = document.getElementById(elementId).textContent;
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(text).then(function() {
+                showCopied(btn);
+            }).catch(function() {
+                fallbackCopy(text, btn);
+            });
+        } else {
+            fallbackCopy(text, btn);
+        }
+    }
+
+    function fallbackCopy(text, btn) {
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        showCopied(btn);
+    }
+
+    function showCopied(btn) {
+        var orig = btn.textContent;
+        btn.textContent = '✓';
+        setTimeout(function() { btn.textContent = orig; }, 1500);
+    }
 </script>
 {% endblock %}
 {% block content %}
@@ -558,6 +589,10 @@
                   <h2 style="margin: 0; color: var(--accent); font-size: 1.8rem;">{{ s.display.card_name }}</h2>
                   <div class="muted" style="font-size: 0.95rem; margin-top: 0.5rem;">
                       {{ s.display.quantization }}
+                  </div>
+                　<div style="margin-top: 0.5rem; display: flex; align-items: center; gap: 0.4rem;">
+                      <code id="section-name-{{ loop.index }}" style="background: var(--bg); border: 1px solid var(--muted); padding: 0.25rem 0.6rem; border-radius: 4px; font-size: 0.85rem; user-select: all; color: #7dcfff;">{{ s.name }}</code>
+                      <button type="button" class="btn btn-secondary" style="padding: 0.2rem 0.5rem; font-size: 0.75rem;" onclick="copyToClip('section-name-{{ loop.index }}', this)">📋</button>
                   </div>
               </div>
           </div>
